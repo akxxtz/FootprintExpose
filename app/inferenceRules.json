@@ -1,0 +1,74 @@
+[
+  {
+    "id": "school_sports_schedule",
+    "match": { "all": ["school", "sport"] },
+    "title": "Predictable weekly schedule",
+    "explain": "Knowing your school AND your sport gives away your location at fixed times every week. Practice usually runs the same days, same time, same gate.",
+    "severity": 18,
+    "category": "schedule"
+  },
+  {
+    "id": "username_birthyear",
+    "matchFn": "usernameContainsYear",
+    "title": "Your real age, confirmed",
+    "explain": "Your username contains what looks like a birth year. Predators tailor their approach to age — e.g. pretending to be 1–2 years older to feel 'safe'.",
+    "severity": 12,
+    "category": "identity"
+  },
+  {
+    "id": "walking_home_alone",
+    "matchFn": "postContains:walking home,walk home,heading home,walking back",
+    "title": "Vulnerability window — you walk alone",
+    "explain": "A post mentioning walking home reveals an unsupervised moment on a predictable route. Combined with school + practice times, an attacker can be waiting at a specific corner.",
+    "severity": 22,
+    "category": "physical"
+  },
+  {
+    "id": "neighbourhood_narrow",
+    "match": { "any": ["neighbourhood", "area"] },
+    "title": "Location narrowed to ~1–2 km",
+    "explain": "A neighbourhood mention plus your school cuts your possible home location down to a small radius. Cross-reference with a sports-club catchment and it's smaller still.",
+    "severity": 15,
+    "category": "location"
+  },
+  {
+    "id": "pet_sibling_password",
+    "match": { "all": ["pet", "sibling"] },
+    "title": "Likely password-recovery answers",
+    "explain": "Pet names and sibling names are the two most common security-question answers. With both, an attacker can attempt account recovery on your email or socials.",
+    "severity": 14,
+    "category": "account"
+  },
+  {
+    "id": "hangout_meet_in_person",
+    "match": { "any": ["hangout"] },
+    "title": "A safe-feeling place to 'bump into' you",
+    "explain": "A favourite hangout gives a predator a low-risk, public location to engineer a 'coincidental' first meeting — making them feel like a familiar face later.",
+    "severity": 11,
+    "category": "physical"
+  },
+  {
+    "id": "school_real_name_guess",
+    "match": { "all": ["school", "username"] },
+    "title": "Real name reachable in <5 minutes",
+    "explain": "School yearbooks, team rosters, and tagged photos let an attacker match your handle to a real name. Most schools' team pages list full names publicly.",
+    "severity": 16,
+    "category": "identity"
+  },
+  {
+    "id": "emotional_hook",
+    "matchFn": "postContains:tired,lonely,fight,argue,hate,sad,bored,nobody,no one",
+    "title": "Emotional opening for grooming",
+    "explain": "A post showing loneliness or conflict signals an emotional gap a predator can step into ('I get it, my family was the same…'). It's the most common opening line.",
+    "severity": 13,
+    "category": "emotional"
+  },
+  {
+    "id": "low_input_baseline",
+    "matchFn": "always",
+    "title": "Even this much is a starting point",
+    "explain": "Anything you share publicly — even just a handle and a sport — gives an attacker a personalised opener. The conversation feels less random, so trust builds faster.",
+    "severity": 6,
+    "category": "general"
+  }
+]

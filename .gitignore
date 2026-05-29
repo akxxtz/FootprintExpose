@@ -1,0 +1,9 @@
+# AI / dev tooling (not part of the game)
+.claude
+.agents
+skills-lock.json
+
+# OS junk
+Thumbs.db
+desktop.ini
+.DS_Store
