@@ -5,7 +5,8 @@
     "title": "Predictable weekly schedule",
     "explain": "Knowing your school AND your sport gives away your location at fixed times every week. Practice usually runs the same days, same time, same gate.",
     "severity": 18,
-    "category": "schedule"
+    "category": "schedule",
+    "saferAlternative": "Post about the sport, but leave out the school name and specific schedule. Example: 'Great session on the field today! ⚽' instead of 'Riverside High soccer practice at 5.'"
   },
   {
     "id": "username_birthyear",
@@ -13,7 +14,8 @@
     "title": "Your real age, confirmed",
     "explain": "Your username contains what looks like a birth year. Predators tailor their approach to age — e.g. pretending to be 1–2 years older to feel 'safe'.",
     "severity": 12,
-    "category": "identity"
+    "category": "identity",
+    "saferAlternative": "Remove birth years or exact ages from your handle. Use random numbers or just your interests. Example: 'alex_runs_fast' instead of 'alex_runs_2010'."
   },
   {
     "id": "walking_home_alone",
@@ -21,7 +23,8 @@
     "title": "Vulnerability window — you walk alone",
     "explain": "A post mentioning walking home reveals an unsupervised moment on a predictable route. Combined with school + practice times, an attacker can be waiting at a specific corner.",
     "severity": 22,
-    "category": "physical"
+    "category": "physical",
+    "saferAlternative": "Wait until you are safely inside your house to post. Example: 'Finally home and exhausted 🛋️' instead of 'Walking home in the rain.'"
   },
   {
     "id": "neighbourhood_narrow",
@@ -29,7 +32,8 @@
     "title": "Location narrowed to ~1–2 km",
     "explain": "A neighbourhood mention plus your school cuts your possible home location down to a small radius. Cross-reference with a sports-club catchment and it's smaller still.",
     "severity": 15,
-    "category": "location"
+    "category": "location",
+    "saferAlternative": "Keep location mentions broad. Mention your city or state, but never your specific neighbourhood, estate, or street name."
   },
   {
     "id": "pet_sibling_password",
@@ -37,7 +41,8 @@
     "title": "Likely password-recovery answers",
     "explain": "Pet names and sibling names are the two most common security-question answers. With both, an attacker can attempt account recovery on your email or socials.",
     "severity": 14,
-    "category": "account"
+    "category": "account",
+    "saferAlternative": "Never use the names of pets or family members as passwords or security questions. Treat them like private security keys, not public trivia."
   },
   {
     "id": "hangout_meet_in_person",
@@ -45,7 +50,8 @@
     "title": "A safe-feeling place to 'bump into' you",
     "explain": "A favourite hangout gives a predator a low-risk, public location to engineer a 'coincidental' first meeting — making them feel like a familiar face later.",
     "severity": 11,
-    "category": "physical"
+    "category": "physical",
+    "saferAlternative": "Post pictures from your hangout AFTER you've left, and avoid naming the specific café or park. Delaying your posts keeps your real-time location hidden."
   },
   {
     "id": "school_real_name_guess",
@@ -53,7 +59,8 @@
     "title": "Real name reachable in <5 minutes",
     "explain": "School yearbooks, team rosters, and tagged photos let an attacker match your handle to a real name. Most schools' team pages list full names publicly.",
     "severity": 16,
-    "category": "identity"
+    "category": "identity",
+    "saferAlternative": "Keep your school name off your public bio. If you want to show school pride, do it on a private account where you personally know every follower."
   },
   {
     "id": "emotional_hook",
@@ -61,7 +68,8 @@
     "title": "Emotional opening for grooming",
     "explain": "A post showing loneliness or conflict signals an emotional gap a predator can step into ('I get it, my family was the same…'). It's the most common opening line.",
     "severity": 13,
-    "category": "emotional"
+    "category": "emotional",
+    "saferAlternative": "Vent in a private journal or to a trusted friend in real life. If you post online, keep it vague: 'Tough day today 🌧️' instead of broadcasting exactly why you are upset."
   },
   {
     "id": "low_input_baseline",
@@ -69,6 +77,7 @@
     "title": "Even this much is a starting point",
     "explain": "Anything you share publicly — even just a handle and a sport — gives an attacker a personalised opener. The conversation feels less random, so trust builds faster.",
     "severity": 6,
-    "category": "general"
+    "category": "general",
+    "saferAlternative": "Regularly review your follower list and keep your account strictly private. Remember that even small details are puzzle pieces for a predator."
   }
 ]
