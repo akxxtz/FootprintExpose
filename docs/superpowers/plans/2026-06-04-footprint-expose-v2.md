@@ -294,7 +294,7 @@ const PHOTO_SCHEMA = {
 
 const TEXT_SYSTEM = `You are a child-safety analyst running an educational simulator. The user submitted a deliberately fake teen social profile. Enumerate the specific inferences a predator could draw, grounded ONLY in the fields provided. Never invent facts. Output 4-8 distinct inferences ranked by severity (1-25). Each inference's chain must cite the exact field values used. Each chain's final step must start with "→" and state the predator's conclusion.`;
 
-const PHOTO_SYSTEM = `You are a child-safety analyst running an educational simulator. The user uploaded one or more (fictional/sample) photos a teen might post publicly. First, in "extracted", list the concrete observable details visible across ALL images (e.g. school crest, street sign, sports kit, house number, reflections, time-of-day, recognisable landmarks) as {label, value} pairs — combine clues across photos. Then in "inferences", enumerate 4-8 specific things a predator could conclude, ranked by severity (1-25), each chain citing which visible detail(s) it used and ending with a "→" conclusion. Ground everything ONLY in what is actually visible. Never invent.`;
+const PHOTO_SYSTEM = `You are a child-safety analyst running an educational simulator. The user uploaded one or more (fictional/sample) images a teen might post publicly. These may be plain photos OR screenshots of social posts (e.g. Instagram) where on-screen text is visible. First, in "extracted", list every concrete detail visible across ALL images as {label, value} pairs — combine clues across images. Read and include BOTH: (a) any on-screen UI text — username/handle, display name, caption, hashtags, location tag, timestamp, commenter usernames, comment text; and (b) physical scene details — school crest, street sign, sports kit, house number, reflections, time-of-day, recognisable landmarks. Then in "inferences", enumerate 4-8 specific things a predator could conclude, ranked by severity (1-25), each chain citing which visible detail(s) it used and ending with a "→" conclusion. Ground everything ONLY in what is actually visible/legible. Never invent.`;
 
 export function buildGeminiBody({ mode, profile, images }) {
   if (mode === "text") {
@@ -631,18 +631,20 @@ git commit -m "feat(web): route text mode through serverless proxy, remove clien
 After `callAnalyze` in `app/index.html`, add:
 
 ```js
-// Downscale to <=1024px longest edge, JPEG q0.8, return raw base64 (no data: prefix).
+// Downscale to <=1536px longest edge, JPEG q0.85, return raw base64 (no data: prefix).
+// 1536/0.85 keeps screenshot text (handles, captions, comments) legible for the AI's
+// OCR while staying well under Vercel's ~4.5MB body cap for up to 5 images.
 const MAX_IMAGES = 5;
 function compressImage(file) {
   return new Promise((resolve, reject) => {
     const img = new Image();
     img.onload = () => {
-      const scale = Math.min(1, 1024 / Math.max(img.width, img.height));
+      const scale = Math.min(1, 1536 / Math.max(img.width, img.height));
       const w = Math.round(img.width * scale), h = Math.round(img.height * scale);
       const canvas = document.createElement("canvas");
       canvas.width = w; canvas.height = h;
       canvas.getContext("2d").drawImage(img, 0, 0, w, h);
-      const dataUrl = canvas.toDataURL("image/jpeg", 0.8);
+      const dataUrl = canvas.toDataURL("image/jpeg", 0.85);
       resolve(dataUrl.split(",")[1]); // strip "data:image/jpeg;base64,"
     };
     img.onerror = () => reject(new Error("Could not read image."));
@@ -689,8 +691,8 @@ function PhotoForm({ onSubmit }) {
         <span className="eyebrow text-[10px] text-zinc-500">step 1 / 3</span>
       </div>
       <p className="text-zinc-400 text-sm mb-6">
-        Use stock or sample images only.
-        <span className="text-red-400"> Do not upload real photos of real people.</span> The AI reads the details itself — no typing needed.
+        Plain photos or screenshots of posts (handle, caption, comments) both work — the AI reads the text and the image itself, no typing needed.
+        <span className="text-red-400"> Use your own test post or a mock-up, not a stranger's real post.</span>
       </p>
 
       <label className="block border border-dashed border-white/15 rounded-lg p-8 text-center cursor-pointer hover:border-red-400/50 transition">
@@ -800,6 +802,7 @@ Replace the single-button block in `Landing` (≈ lines 461-466) and update its 
 
 Run `npx vercel dev` (with a real `GEMINI_API_KEY` in `.env.local`). From landing, click "Analyse photos", add 1 then up to 5 sample images, click Analyse.
 Expected: Analysing → inference web renders from the images; Network shows `POST /api/analyze` with `mode:"photo"` returning 200; DevTools shows no Google key anywhere. Also confirm text mode still works from "Build a profile".
+Include at least one **screenshot of a mock social post** (visible handle, caption, a comment): confirm the result's `extracted`/inferences reference the on-screen handle/caption/comment text, proving OCR works at the 1536px/0.85 compression setting.
 
 - [ ] **Step 5: Commit**
 

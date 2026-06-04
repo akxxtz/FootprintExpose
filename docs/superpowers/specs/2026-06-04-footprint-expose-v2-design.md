@@ -68,6 +68,12 @@ Both modes converge on the **existing** screen flow:
 - **No manual fields.** Gemini Vision reads the image(s) *together* and extracts the
   inferable details itself. Analysing several "harmless" photos at once — and showing
   how they combine — is an intended teaching beat.
+- **Screenshots of posts are first-class input.** Images may be plain photos *or*
+  screenshots of social posts (e.g. Instagram) where on-screen text is visible. Gemini
+  reads text in images natively (OCR), so the username/handle, caption, hashtags,
+  location tag, timestamp, and commenter usernames/comments are all extracted with no
+  extra plumbing. The vision prompt explicitly directs the model to read both the
+  on-screen UI text and the physical scene.
 - On analyse, the (compressed) images are sent as `{ mode: "photo", images: [base64...] }`.
 - The reveal additionally shows an **"What the AI saw in your photos"** panel
   (the `extracted` block) before the inference web, so the user sees the raw read
@@ -116,7 +122,10 @@ base64 photos exceed this easily, so the **frontend compresses each image before
 upload**:
 
 - Draw each selected image onto a `<canvas>`, downscaled so the longest edge is
-  **≤ ~1024 px**, and export as **JPEG at ~0.8 quality**.
+  **≤ ~1536 px**, and export as **JPEG at ~0.85 quality**. These values are chosen so
+  that **text in post screenshots (handles, captions, comments) stays legible for the
+  model's OCR** — 1024 px / 0.8 smears small comment text on tall screenshots. Five
+  1536 px JPEGs at 0.85 land around ~1–2 MB total, comfortably under the body cap.
 - Cap the number of images at **5**.
 - If the combined encoded payload still looks too large, warn the user and ask them to
   remove an image rather than failing opaquely.
@@ -165,7 +174,9 @@ Update: landing content warning, reveal-screen copy, README, and this design's f
 
 - **Fictional inputs encouraged.** Sample text profiles remain clearly fictional; for
   photo mode, a banner reminds users to upload **non-personal / stock / consented**
-  images, not real photos of real minors.
+  images, not real photos of real minors. Because **post screenshots** capture other
+  people's handles, faces, and comments, the banner explicitly tells users to use their
+  own test post or a mock-up — **not a stranger's real post**.
 - **No grooming scripts.** Inferences stop at *what an attacker could know*, never
   *what they would say*.
 - **No storage.** Images are processed in memory and never persisted or logged.
