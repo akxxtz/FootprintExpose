@@ -12,7 +12,7 @@ export function validateRequest(body) {
     return { ok: false, status: 400, error: "mode must be 'text' or 'photo'." };
   }
   if (mode === "text") {
-    if (!body.profile || typeof body.profile !== "object") {
+    if (!body.profile || typeof body.profile !== "object" || Array.isArray(body.profile)) {
       return { ok: false, status: 400, error: "text mode requires a profile object." };
     }
     return { ok: true };
@@ -24,6 +24,9 @@ export function validateRequest(body) {
   }
   if (images.length > MAX_IMAGES) {
     return { ok: false, status: 413, error: `Too many images (max ${MAX_IMAGES}).` };
+  }
+  if (!images.every(item => typeof item === "string")) {
+    return { ok: false, status: 400, error: "Each image must be a base64 string." };
   }
   const total = images.reduce((n, s) => n + (typeof s === "string" ? s.length : 0), 0);
   if (total > MAX_TOTAL_B64) {
