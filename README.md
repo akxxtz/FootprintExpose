@@ -56,8 +56,9 @@ FootprintExpose/
 ├── tests/
 │   └── analyze.test.js       # Backend unit tests (node:test, no deps)
 ├── docs/
-│   └── superpowers/specs/
-│       └── 2026-05-22-footprint-expose-design.md
+│   └── superpowers/
+│       ├── specs/2026-06-04-footprint-expose-v2-design.md   # current (v2) design
+│       └── plans/2026-06-04-footprint-expose-v2.md          # v2 implementation plan
 ├── .env.example              # Template — copy to .env.local for local dev
 ├── vercel.json               # Serves app/ as static output; api/ as functions
 ├── package.json              # npm scripts only; no runtime dependencies
@@ -70,15 +71,16 @@ FootprintExpose/
 
 | Component | Responsibility |
 |---|---|
-| `App` | Routes between landing → form/upload → analysing → web → reveal |
-| `LandingScreen` | Hook + dual CTA + content warning |
+| `App` | Routes between landing → form / photoForm → analysing → web → reveal |
+| `Landing` | Hook + dual CTA (text / photo) + content warning |
 | `ProfileForm` | Collects fictional text-mode inputs |
-| `PhotoUpload` | Drag-and-drop / file picker; encodes to base64 |
-| `AnalysingScreen` | Animated terminal log during API call |
-| `InferenceEngine` | Pure function: `(profile) ⇒ inference[]` — offline text fallback |
-| `InferenceGraph` | Force-directed visualisation; click a node for the explanation card |
+| `PhotoForm` | File picker; client-side downscale/compress to base64 (≤1536px, JPEG 0.85) |
+| `Analysing` | Animated terminal log during the API call |
+| `runInference` | Pure function `(profile) ⇒ inference[]` — offline scripted fallback for text mode |
+| `InferenceWeb` / `DetailCard` | Force-directed graph; click a node for the explanation card |
 | `SeverityMeter` | Animated 0–100 score bar |
-| `RevealScreen` | Plain-language summary + per-field "safer alternative" + Caption Rewriter |
+| `Reveal` | Summary, per-field "safer alternatives", the extracted-from-photos panel, and the Caption Rewriter |
+| `CaptionAnalyzer` | Caption Rewriter tool (predator-safe rewrite via the proxy) |
 
 ---
 
@@ -168,7 +170,7 @@ The old single-file version carried the privacy claim *"we never send your data 
 - **No real profile lookups.** The app performs no actual OSINT scraping.
 - **Prefilled sample profiles** (clearly fictional) so users are not tempted to enter real personal data. A banner reminds them.
 - **No grooming scripts shown.** Inferences stop at *what an attacker could know*, never *what they would say*.
-- **Teacher mode** lets a facilitator pre-load the demo, skip the analysing delay, and pace the reveals manually.
+- **Server-side key.** The Gemini key lives only in the serverless function's environment; it is never sent to or exposed in the browser.
 - **Content warning** on the landing screen.
 
 ---
@@ -206,4 +208,4 @@ Please keep rules plausible and educational. Anything resembling an actual groom
 
 ## Credits
 
-Group project for **WIC2007 Cyber Security**. Design spec authored 2026-05-22; see `docs/superpowers/specs/2026-05-22-footprint-expose-design.md` for the full design rationale.
+Group project for **WIC2007 Cyber Security**. The current (v2) design and rationale live in `docs/superpowers/specs/2026-06-04-footprint-expose-v2-design.md`, with the step-by-step build in `docs/superpowers/plans/2026-06-04-footprint-expose-v2.md`. The original single-file design is preserved at `docs/superpowers/specs/2026-05-22-footprint-expose-design.md`.
