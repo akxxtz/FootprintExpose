@@ -144,3 +144,14 @@ test("normalizeResult passes through extracted[] for photo", () => {
 test("normalizeResult throws on empty candidates", () => {
   assert.throws(() => normalizeResult({ candidates: [] }));
 });
+
+test("normalizeResult throws a clean error on non-JSON text", () => {
+  const bad = { candidates: [{ content: { parts: [{ text: "not json <html>" }] } }] };
+  assert.throws(() => normalizeResult(bad), /non-JSON/);
+});
+
+test("normalizeResult returns empty arrays when inferences key is absent", () => {
+  const out = normalizeResult({ candidates: [{ content: { parts: [{ text: JSON.stringify({}) }] } }] });
+  assert.deepEqual(out.inferences, []);
+  assert.deepEqual(out.extracted, []);
+});

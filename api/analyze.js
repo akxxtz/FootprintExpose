@@ -100,7 +100,12 @@ ${JSON.stringify(profile, null, 2)}` }] }],
 export function normalizeResult(geminiJson) {
   const text = geminiJson?.candidates?.[0]?.content?.parts?.[0]?.text;
   if (!text) throw new Error("Empty response from Gemini.");
-  const parsed = JSON.parse(text);
+  let parsed;
+  try {
+    parsed = JSON.parse(text);
+  } catch {
+    throw new Error("Gemini returned non-JSON text.");
+  }
   const inferences = (Array.isArray(parsed.inferences) ? parsed.inferences : [])
     .filter(i => i && i.title && i.explain && Array.isArray(i.chain))
     .map(i => ({ ...i, severity: Math.max(1, Math.min(25, parseInt(i.severity, 10) || 5)) }))
