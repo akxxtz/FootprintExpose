@@ -34,3 +34,65 @@ export function validateRequest(body) {
   }
   return { ok: true };
 }
+
+const INFERENCE_ITEM = {
+  type: "OBJECT",
+  properties: {
+    id: { type: "STRING" },
+    severity: { type: "INTEGER" },
+    category: { type: "STRING", enum: ["schedule","identity","physical","location","account","emotional","general"] },
+    title: { type: "STRING" },
+    summary: { type: "STRING" },
+    explain: { type: "STRING" },
+    chain: { type: "ARRAY", items: { type: "STRING" } }
+  },
+  required: ["id","severity","category","title","summary","explain","chain"]
+};
+
+const TEXT_SCHEMA = {
+  type: "OBJECT",
+  properties: { inferences: { type: "ARRAY", items: INFERENCE_ITEM } },
+  required: ["inferences"]
+};
+
+const PHOTO_SCHEMA = {
+  type: "OBJECT",
+  properties: {
+    extracted: {
+      type: "ARRAY",
+      items: {
+        type: "OBJECT",
+        properties: { label: { type: "STRING" }, value: { type: "STRING" } },
+        required: ["label", "value"]
+      }
+    },
+    inferences: { type: "ARRAY", items: INFERENCE_ITEM }
+  },
+  required: ["extracted", "inferences"]
+};
+
+const TEXT_SYSTEM = `You are a child-safety analyst running an educational simulator. The user submitted a deliberately fake teen social profile. Enumerate the specific inferences a predator could draw, grounded ONLY in the fields provided. Never invent facts. Output 4-8 distinct inferences ranked by severity (1-25). Each inference's chain must cite the exact field values used. Each chain's final step must start with "→" and state the predator's conclusion.`;
+
+const PHOTO_SYSTEM = `You are a child-safety analyst running an educational simulator. The user uploaded one or more (fictional/sample) images a teen might post publicly. These may be plain photos OR screenshots of social posts (e.g. Instagram) where on-screen text is visible. First, in "extracted", list every concrete detail visible across ALL images as {label, value} pairs — combine clues across images. Read and include BOTH: (a) any on-screen UI text — username/handle, display name, caption, hashtags, location tag, timestamp, commenter usernames, comment text; and (b) physical scene details — school crest, street sign, sports kit, house number, reflections, time-of-day, recognisable landmarks. Then in "inferences", enumerate 4-8 specific things a predator could conclude, ranked by severity (1-25), each chain citing which visible detail(s) it used and ending with a "→" conclusion. Ground everything ONLY in what is actually visible/legible. Never invent.`;
+
+export function buildGeminiBody({ mode, profile, images }) {
+  if (mode === "text") {
+    return {
+      systemInstruction: { parts: [{ text: TEXT_SYSTEM }] },
+      contents: [{ role: "user", parts: [{ text:
+`Analyse this profile. chain[] must list 2-4 evidence steps; the final step starts with "→". summary is one sentence <=140 chars. explain is 2-4 sentences, second person.
+
+PROFILE:
+${JSON.stringify(profile, null, 2)}` }] }],
+      generationConfig: { responseMimeType: "application/json", responseSchema: TEXT_SCHEMA, temperature: 0.6 }
+    };
+  }
+  // photo
+  const parts = [{ text: "Analyse these images together. Fill extracted[] with observable details, then inferences[] as instructed." }];
+  for (const data of images) parts.push({ inlineData: { mimeType: "image/jpeg", data } });
+  return {
+    systemInstruction: { parts: [{ text: PHOTO_SYSTEM }] },
+    contents: [{ role: "user", parts }],
+    generationConfig: { responseMimeType: "application/json", responseSchema: PHOTO_SCHEMA, temperature: 0.6 }
+  };
+}

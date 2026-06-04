@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { validateRequest, MAX_IMAGES } from "../api/analyze.js";
+import { validateRequest, MAX_IMAGES, buildGeminiBody } from "../api/analyze.js";
 
 test("validateRequest rejects missing mode", () => {
   const r = validateRequest({});
@@ -67,4 +67,26 @@ test("validateRequest rejects images over the total size cap", () => {
   const r = validateRequest({ mode: "photo", images: [big] });
   assert.equal(r.ok, false);
   assert.equal(r.status, 413);
+});
+
+test("buildGeminiBody (text) puts profile JSON in a text part", () => {
+  const body = buildGeminiBody({ mode: "text", profile: { username: "alex" } });
+  const parts = body.contents[0].parts;
+  assert.ok(parts.some(p => typeof p.text === "string" && p.text.includes("alex")));
+  assert.equal(body.generationConfig.responseMimeType, "application/json");
+  assert.ok(body.generationConfig.responseSchema);
+});
+
+test("buildGeminiBody (photo) adds one inlineData part per image", () => {
+  const body = buildGeminiBody({ mode: "photo", images: ["AAAA", "BBBB"] });
+  const parts = body.contents[0].parts;
+  const inline = parts.filter(p => p.inlineData);
+  assert.equal(inline.length, 2);
+  assert.equal(inline[0].inlineData.mimeType, "image/jpeg");
+  assert.equal(inline[0].inlineData.data, "AAAA");
+});
+
+test("buildGeminiBody (photo) schema includes an extracted field", () => {
+  const body = buildGeminiBody({ mode: "photo", images: ["AAAA"] });
+  assert.ok(body.generationConfig.responseSchema.properties.extracted);
 });
