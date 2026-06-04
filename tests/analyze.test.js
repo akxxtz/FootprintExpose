@@ -104,3 +104,43 @@ test("INFERENCE_ITEM severity is bounded 1-25 in the schema", () => {
   assert.equal(sev.minimum, 1);
   assert.equal(sev.maximum, 25);
 });
+
+import { normalizeResult } from "../api/analyze.js";
+
+function fakeGeminiResponse(obj) {
+  return { candidates: [{ content: { parts: [{ text: JSON.stringify(obj) }] } }] };
+}
+
+test("normalizeResult clamps severity, sorts desc, caps at 8", () => {
+  const inferences = Array.from({ length: 10 }, (_, i) => ({
+    id: "i" + i, severity: i + 50, category: "general",
+    title: "t" + i, summary: "s", explain: "e", chain: ["a", "→ b"]
+  }));
+  const out = normalizeResult(fakeGeminiResponse({ inferences }));
+  assert.equal(out.inferences.length, 8);
+  assert.equal(out.inferences[0].severity, 25); // clamped to max
+  assert.ok(out.inferences[0].severity >= out.inferences[1].severity); // sorted
+});
+
+test("normalizeResult drops malformed inferences", () => {
+  const out = normalizeResult(fakeGeminiResponse({
+    inferences: [
+      { id: "ok", severity: 5, category: "general", title: "t", summary: "s", explain: "e", chain: ["x"] },
+      { id: "bad", severity: 5 } // missing title/explain/chain
+    ]
+  }));
+  assert.equal(out.inferences.length, 1);
+  assert.equal(out.inferences[0].id, "ok");
+});
+
+test("normalizeResult passes through extracted[] for photo", () => {
+  const out = normalizeResult(fakeGeminiResponse({
+    extracted: [{ label: "School crest", value: "SMK Damansara" }],
+    inferences: [{ id: "a", severity: 9, category: "location", title: "t", summary: "s", explain: "e", chain: ["x"] }]
+  }));
+  assert.equal(out.extracted[0].value, "SMK Damansara");
+});
+
+test("normalizeResult throws on empty candidates", () => {
+  assert.throws(() => normalizeResult({ candidates: [] }));
+});
