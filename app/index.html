@@ -241,6 +241,27 @@ async function callAnalyze(payload) {
   return data; // { source, inferences, extracted }
 }
 
+// Downscale to <=1536px longest edge, JPEG q0.85, return raw base64 (no data: prefix).
+// 1536/0.85 keeps screenshot text (handles, captions, comments) legible for the AI's
+// OCR while staying well under Vercel's ~4.5MB body cap for up to 5 images.
+const MAX_IMAGES = 5;
+function compressImage(file) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => {
+      const scale = Math.min(1, 1536 / Math.max(img.width, img.height));
+      const w = Math.round(img.width * scale), h = Math.round(img.height * scale);
+      const canvas = document.createElement("canvas");
+      canvas.width = w; canvas.height = h;
+      canvas.getContext("2d").drawImage(img, 0, 0, w, h);
+      const dataUrl = canvas.toDataURL("image/jpeg", 0.85);
+      resolve(dataUrl.split(",")[1]); // strip "data:image/jpeg;base64,"
+    };
+    img.onerror = () => reject(new Error("Could not read image."));
+    img.src = URL.createObjectURL(file);
+  });
+}
+
 /* ------------------------------------------------------------------ */
 /* Scripted inference engine (fallback / offline)                      */
 /* ------------------------------------------------------------------ */
@@ -458,6 +479,74 @@ function ProfileForm({ onSubmit }) {
           className={`px-5 py-2.5 rounded-md font-semibold transition
             ${minFilled ? "bg-red-500 hover:bg-red-400 text-black glow-red" : "bg-zinc-800 text-zinc-500 cursor-not-allowed"}`}>
           Analyse →
+        </button>
+      </div>
+    </section>
+  );
+}
+
+function PhotoForm({ onSubmit }) {
+  const [items, setItems] = useState([]); // { id, preview, b64 }
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState(null);
+
+  async function addFiles(fileList) {
+    setErr(null);
+    const files = Array.from(fileList).filter(f => f.type.startsWith("image/"));
+    if (items.length + files.length > MAX_IMAGES) {
+      setErr(`Max ${MAX_IMAGES} images.`);
+      return;
+    }
+    setBusy(true);
+    try {
+      const added = [];
+      for (const f of files) {
+        const b64 = await compressImage(f);
+        added.push({ id: Math.random().toString(36).slice(2), preview: `data:image/jpeg;base64,${b64}`, b64 });
+      }
+      setItems(prev => [...prev, ...added]);
+    } catch (e) { setErr(e.message); }
+    setBusy(false);
+  }
+
+  function remove(id) { setItems(prev => prev.filter(x => x.id !== id)); }
+
+  return (
+    <section className="max-w-3xl mx-auto px-6 py-12">
+      <div className="flex items-baseline justify-between mb-2">
+        <h2 className="text-3xl"><span className="font-medium">Upload</span> <span className="display text-red-300">photos</span></h2>
+        <span className="eyebrow text-[10px] text-zinc-500">step 1 / 3</span>
+      </div>
+      <p className="text-zinc-400 text-sm mb-6">
+        Plain photos or screenshots of posts (handle, caption, comments) both work — the AI reads the text and the image itself, no typing needed.
+        <span className="text-red-400"> Use your own test post or a mock-up, not a stranger's real post.</span>
+      </p>
+
+      <label className="block border border-dashed border-white/15 rounded-lg p-8 text-center cursor-pointer hover:border-red-400/50 transition">
+        <input type="file" accept="image/*" multiple className="hidden"
+          onChange={(e) => { addFiles(e.target.files); e.target.value = ""; }} />
+        <span className="mono text-xs text-zinc-400">{busy ? "Processing…" : `Click to add images (max ${MAX_IMAGES})`}</span>
+      </label>
+
+      {err && <p className="text-red-400 text-xs mt-3">{err}</p>}
+
+      {items.length > 0 && (
+        <div className="grid grid-cols-3 sm:grid-cols-5 gap-3 mt-5">
+          {items.map(it => (
+            <div key={it.id} className="relative group">
+              <img src={it.preview} className="w-full h-24 object-cover rounded border border-white/10" alt="upload" />
+              <button onClick={() => remove(it.id)}
+                className="absolute top-1 right-1 w-5 h-5 rounded-full bg-black/70 text-white text-xs leading-none">×</button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <div className="mt-8 flex justify-end">
+        <button disabled={items.length === 0 || busy}
+          onClick={() => onSubmit(items.map(x => x.b64))}
+          className={`px-6 py-2.5 rounded-md font-semibold transition ${items.length && !busy ? "bg-red-500 hover:bg-red-400 text-black glow-red" : "bg-zinc-800 text-zinc-500 cursor-not-allowed"}`}>
+          Analyse photos →
         </button>
       </div>
     </section>
