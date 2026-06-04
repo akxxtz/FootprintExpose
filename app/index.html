@@ -228,85 +228,17 @@ const SAMPLE_PROFILES = [
 ];
 
 /* ------------------------------------------------------------------ */
-/* Gemini-backed inference (with scripted fallback)                    */
+/* Serverless proxy + scripted fallback                                */
 /* ------------------------------------------------------------------ */
-const GEMINI_MODEL = "gemini-2.5-flash";
-const GEMINI_KEY_STORAGE = "ftpx_gemini_key";
-
-function getApiKey() {
-  try { return sessionStorage.getItem(GEMINI_KEY_STORAGE) || ""; } catch { return ""; }
-}
-function setApiKey(v) {
-  try {
-    if (v) sessionStorage.setItem(GEMINI_KEY_STORAGE, v);
-    else sessionStorage.removeItem(GEMINI_KEY_STORAGE);
-    // Clear any key left behind by older localStorage-based builds.
-    localStorage.removeItem(GEMINI_KEY_STORAGE);
-  } catch {}
-}
-
-const GEMINI_SYSTEM = `You are a child-safety analyst running an educational simulator. The user has just submitted a deliberately fake teen social profile. Your job: enumerate the specific inferences a predator could draw, grounded ONLY in the fields actually provided. Never invent facts not present in the profile. Be direct, second-person, non-sensational. Output 4-8 distinct inferences ranked by severity (1-25). Each inference's evidence chain must cite the exact field values it used.`;
-
-const GEMINI_SCHEMA = {
-  type: "OBJECT",
-  properties: {
-    inferences: {
-      type: "ARRAY",
-      items: {
-        type: "OBJECT",
-        properties: {
-          id: { type: "STRING" },
-          severity: { type: "INTEGER" },
-          category: { type: "STRING", enum: ["schedule","identity","physical","location","account","emotional","general"] },
-          title: { type: "STRING" },
-          summary: { type: "STRING" },
-          explain: { type: "STRING" },
-          chain: { type: "ARRAY", items: { type: "STRING" } }
-        },
-        required: ["id","severity","category","title","summary","explain","chain"]
-      }
-    }
-  },
-  required: ["inferences"]
-};
-
-async function runInferenceGemini(profile, key) {
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${encodeURIComponent(key)}`;
-  const body = {
-    systemInstruction: { parts: [{ text: GEMINI_SYSTEM }] },
-    contents: [{
-      role: "user",
-      parts: [{ text:
-`Analyse this profile. The chain[] array must list 2-4 evidence steps; the final step must start with "→" and state the predator's conclusion. summary is one sentence, <=140 chars. explain is 2-4 sentences in second person.
-
-PROFILE:
-${JSON.stringify(profile, null, 2)}` }]
-    }],
-    generationConfig: {
-      responseMimeType: "application/json",
-      responseSchema: GEMINI_SCHEMA,
-      temperature: 0.6
-    }
-  };
-  const res = await fetch(url, {
+async function callAnalyze(payload) {
+  const res = await fetch("/api/analyze", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body)
+    body: JSON.stringify(payload)
   });
-  if (!res.ok) {
-    const txt = await res.text().catch(()=>"");
-    throw new Error(`Gemini ${res.status}: ${txt.slice(0,200)}`);
-  }
-  const j = await res.json();
-  const text = j?.candidates?.[0]?.content?.parts?.[0]?.text;
-  if (!text) throw new Error("Empty response from Gemini");
-  const parsed = JSON.parse(text);
-  const list = Array.isArray(parsed.inferences) ? parsed.inferences : [];
-  return list
-    .filter(i => i && i.title && i.explain && Array.isArray(i.chain))
-    .map(i => ({ ...i, severity: Math.max(1, Math.min(25, parseInt(i.severity,10) || 5)) }))
-    .sort((a,b) => b.severity - a.severity)
-    .slice(0, 8);
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || `Server error ${res.status}`);
+  return data; // { source, inferences, extracted }
 }
 
 /* ------------------------------------------------------------------ */
@@ -375,26 +307,24 @@ function App() {
   const [inferences, setInferences] = useState([]);
   const [source, setSource] = useState("scripted"); // scripted | loading | ai
   const [aiError, setAiError] = useState(null);
+  const [extracted, setExtracted] = useState([]);
 
   async function startFromProfile(prof) {
     const scripted = runInference(prof);
     setProfile(prof);
     setInferences(scripted);
     setAiError(null);
+    setExtracted([]);
     setScreen("analysing");
-
-    const key = getApiKey();
-    if (!key) { setSource("scripted"); return; }
-
     setSource("loading");
     try {
-      const ai = await runInferenceGemini(prof, key);
-      if (ai.length) { setInferences(ai); setSource("ai"); }
-      else { setSource("scripted"); setAiError("Gemini returned no inferences — using scripted fallback."); }
+      const data = await callAnalyze({ mode: "text", profile: prof });
+      if (data.inferences?.length) { setInferences(data.inferences); setSource("ai"); }
+      else { setSource("scripted"); setAiError("AI returned no inferences — using scripted fallback."); }
     } catch (e) {
       console.error(e);
       setSource("scripted");
-      setAiError(e.message || "Gemini call failed — using scripted fallback.");
+      setAiError((e.message || "AI call failed") + " — using scripted fallback.");
     }
   }
 
@@ -405,7 +335,7 @@ function App() {
       {screen === "form"      && <ProfileForm onSubmit={startFromProfile} />}
       {screen === "analysing" && <Analysing profile={profile} inferences={inferences} source={source} onDone={() => setScreen("web")} />}
       {screen === "web"       && <InferenceWeb profile={profile} inferences={inferences} source={source} aiError={aiError} onReveal={() => setScreen("reveal")} />}
-      {screen === "reveal"    && <Reveal profile={profile} inferences={inferences} source={source} onRestart={() => setScreen("landing")} />}
+      {screen === "reveal"    && <Reveal profile={profile} inferences={inferences} source={source} extracted={extracted} onRestart={() => setScreen("landing")} />}
       <Footer />
     </div>
   );
@@ -427,9 +357,6 @@ function TopBar({ onReset, source }) {
       </button>
       <div className="flex items-center gap-3">
         <span className={`mono text-[10px] px-2 py-1 rounded border ${badge.cls}`}>{badge.text}</span>
-        <div className="mono text-[11px] text-zinc-500 hidden sm:block">
-          client-side only · key stored locally
-        </div>
       </div>
     </header>
   );
@@ -479,13 +406,10 @@ function ProfileForm({ onSubmit }) {
     username:"", age:"", school:"", sport:"", neighbourhood:"",
     posts:"", pet:"", sibling:"", hangout:""
   });
-  const [apiKey, setApiKeyState] = useState(getApiKey());
-  const [showKey, setShowKey] = useState(false);
   const set = (k) => (e) => setP(prev => ({ ...prev, [k]: e.target.value }));
   const minFilled = [p.username, p.school, p.sport, p.posts].filter(Boolean).length >= 2;
 
   function loadSample(i) { setP(SAMPLE_PROFILES[i].data); }
-  function saveKey(v) { setApiKeyState(v); setApiKey(v.trim()); }
 
   return (
     <section className="max-w-3xl mx-auto px-6 py-12">
@@ -525,38 +449,9 @@ function ProfileForm({ onSubmit }) {
           className="mt-1 w-full bg-white/[0.03] border border-white/10 focus:border-red-400/60 focus:outline-none rounded-md px-3 py-2 text-sm" />
       </label>
 
-      <div className="mt-8 rounded-md border border-white/10 bg-white/[0.02] p-4">
-        <div className="flex items-baseline justify-between mb-2">
-          <span className="eyebrow text-[10px] text-zinc-400">Gemini API key (optional)</span>
-          <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener noreferrer"
-             className="mono text-[10px] text-zinc-500 hover:text-red-300">get a free key ↗</a>
-        </div>
-        <div className="flex gap-2">
-          <input
-            type={showKey ? "text" : "password"}
-            value={apiKey}
-            onChange={(e)=>saveKey(e.target.value)}
-            placeholder="paste key to use live Gemini analysis · leave blank for scripted rules"
-            className="flex-1 bg-black/40 border border-white/10 focus:border-red-400/60 focus:outline-none rounded-md px-3 py-2 mono text-xs" />
-          <button type="button" onClick={()=>setShowKey(s=>!s)}
-            className="mono text-[10px] px-2 rounded border border-white/10 text-zinc-400 hover:text-zinc-200">
-            {showKey ? "hide" : "show"}
-          </button>
-          <button type="button" disabled={!apiKey} onClick={()=>{ saveKey(""); setShowKey(false); }}
-            className="mono text-[10px] px-2 rounded border border-white/10 text-zinc-400 hover:text-red-300 disabled:opacity-30 disabled:hover:text-zinc-400">
-            clear
-          </button>
-        </div>
-        <p className="mono text-[10px] text-zinc-500 mt-2 leading-relaxed">
-          Key is held only in this tab's sessionStorage and cleared when you close it; it is sent directly to Google's API with no server in between. Don't enter your key on a shared or public computer.
-        </p>
-      </div>
-
       <div className="mt-6 flex items-center justify-between">
         <span className="mono text-[11px] text-zinc-500">
-          {minFilled
-            ? (apiKey ? "ready · will query Gemini" : "ready · will use scripted rules")
-            : "fill at least 2 fields to continue"}
+          {minFilled ? "ready · will analyse via server" : "fill at least 2 fields to continue"}
         </span>
         <button disabled={!minFilled} onClick={()=>onSubmit(p)}
           className={`px-5 py-2.5 rounded-md font-semibold transition
@@ -814,63 +709,27 @@ function CaptionAnalyzer() {
     setIsAnalyzing(true);
     setResult(null);
 
-    const apiKey = getApiKey(); // Grabs the key the user entered on the first page!
-    
-    if (!apiKey) {
-      setResult({
-        attackerView: "API Key Missing",
-        safeAlternative: "Please enter your free Gemini API Key on the first page.",
-        explanation: "The Caption Rewriter needs an API key to analyze custom text."
-      });
-      setIsAnalyzing(false);
-      return;
-    }
-
-    const systemPrompt = `You are a cybersecurity privacy expert acting as a safe-posting filter for teenagers. 
-    Rewrite the user's social media caption to be completely safe from online predators while keeping the original teenage tone, slang, and emojis.
-    Strip real-time locations, exact routines, and identifiable nouns. Neutralize emotional vulnerability.
-    
-    You MUST respond strictly in JSON format with exactly three keys:
-    1. "attackerView": A single sentence explaining what a predator infers from the original post.
-    2. "safeAlternative": The rewritten, predator-proof caption.
-    3. "explanation": A short explanation of why the original red flags were dangerous.`;
-
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${encodeURIComponent(apiKey)}`;
-    
     try {
-      const response = await fetch(url, {
+      const res = await fetch("/api/analyze", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          systemInstruction: { parts: [{ text: systemPrompt }] },
-          contents: [{ role: "user", parts: [{ text: caption }] }],
-          generationConfig: {
-            responseMimeType: "application/json"
-          }
-        })
+        body: JSON.stringify({ mode: "caption", caption })
       });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || `Server error ${res.status}`);
 
-      if (!response.ok) throw new Error("Gemini API Error");
-
-      const data = await response.json();
-      const textResponse = data.candidates?.[0]?.content?.parts?.[0]?.text;
-      
-      if (!textResponse) throw new Error("Empty response");
-
-      const aiResult = JSON.parse(textResponse);
-      
       setResult({
-        attackerView: aiResult.attackerView,
-        safeAlternative: aiResult.safeAlternative,
-        explanation: aiResult.explanation
+        attackerView: data.attackerView || "",
+        safeAlternative: data.safeAlternative || "",
+        explanation: data.explanation || ""
       });
 
     } catch (error) {
       console.error(error);
       setResult({
         attackerView: "Analysis Failed",
-        safeAlternative: "Could not connect to AI.",
-        explanation: "There was an error communicating with Gemini. Please check your API key."
+        safeAlternative: "Could not connect to server.",
+        explanation: "There was an error communicating with the analysis server."
       });
     }
     
