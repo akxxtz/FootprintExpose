@@ -319,6 +319,7 @@ function App() {
     setSource("loading");
     try {
       const data = await callAnalyze({ mode: "text", profile: prof });
+      setExtracted(data.extracted ?? []);
       if (data.inferences?.length) { setInferences(data.inferences); setSource("ai"); }
       else { setSource("scripted"); setAiError("AI returned no inferences — using scripted fallback."); }
     } catch (e) {
