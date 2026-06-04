@@ -1,189 +1,466 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Footprint Expose - Visual Snapshot Audit</title>
-  <!-- Load React, ReactDOM, and Babel from CDNs to run without Node/npm -->
-  <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
-  <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>
-  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-  <!-- Load Tailwind CSS via CDN -->
-  <script src="https://cdn.tailwindcss.com"></script>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Footprint Expose — what they can already see</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Space+Grotesk:wght@300;400;500;600;700&family=JetBrains+Mono:wght@300;400;500;700&display=swap" rel="stylesheet">
+<style>
+  html, body, #root { height: 100%; }
+  body { background:#07080d; color:#e6e7eb;
+         font-family: "Space Grotesk", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+         font-feature-settings: "ss01", "cv11"; }
+  .mono { font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-feature-settings: "zero", "ss02"; }
+  .serif { font-family: "Instrument Serif", "Times New Roman", serif; font-weight: 400; }
+  h1, h2, h3 { letter-spacing: -0.02em; }
+  .display { font-family: "Instrument Serif", serif; font-style: italic; font-weight: 400; letter-spacing: -0.025em; }
+  .eyebrow { font-family: "JetBrains Mono", monospace; font-weight: 400; letter-spacing: 0.32em; text-transform: uppercase; }
+  .scan-line { background: repeating-linear-gradient(0deg, rgba(255,255,255,.03) 0 2px, transparent 2px 4px); }
+  .glow-red { box-shadow: 0 0 24px rgba(239,68,68,.35), inset 0 0 12px rgba(239,68,68,.15); }
+  .node-pop { animation: pop .45s cubic-bezier(.2,1.4,.4,1) both; }
+  @keyframes pop { from { transform: scale(.4); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+  .line-draw { stroke-dasharray: 400; stroke-dashoffset: 400; animation: draw .7s ease-out forwards; }
+  @keyframes draw { to { stroke-dashoffset: 0; } }
+  .pulse-dot { animation: pulse 1.4s ease-in-out infinite; }
+  @keyframes pulse { 0%,100% { opacity: .35 } 50% { opacity: 1 } }
+  .typing::after { content: "▍"; animation: blink 1s steps(1) infinite; }
+  @keyframes blink { 50% { opacity: 0 } }
+  .log::-webkit-scrollbar { width: 6px; }
+  .log::-webkit-scrollbar-thumb { background: #1f2937; border-radius: 3px; }
+</style>
 </head>
-<body class="bg-zinc-950 text-zinc-50 min-h-screen selection:bg-red-500 selection:text-zinc-950">
+<body>
+<div id="root"></div>
 
-  <div id="root"></div>
+<script type="text/babel" data-presets="react">
+const { useState, useEffect, useMemo } = React;
 
-  <script type="text/babel">
-    const { useState } = React;
+const WALK_PATTERNS = [
+  /walk(ing)? (home|back)/i, /heading home/i, /on my way home/i,
+  /balik (sekolah|rumah)/i, /jalan kaki/i, /jalan balik/i
+];
+const EMO_PATTERNS = [
+  /\b(tired|lonely|fight|argue|arguing|hate|sad|bored|nobody|no one|alone)\b/i,
+  /\b(penat|marah|sedih|bosan|lari rumah|annoying|takde sesiapa)\b/i
+];
 
-    // Prefilled, synthetic cybersecurity scenario datasets 
-    const IMAGE_SCENARIOS = [
-      {
-        id: "desktop",
-        name: "Scenario 1: Desktop IDE Capture",
-        description: "A common screenshot shared on coding forums that accidentally leaks environment system configurations.",
-        url: "https://images.unsplash.com/photo-1629654297299-c8506221ca97?auto=format&fit=crop&w=600&q=80",
-        classification: "Development Workspace Environment Screen Capture",
-        extractedData: "• System User String: C:\\Users\\Alex_Tan_2008\\\n• Open Applications: Discord App window showing active regional channel (#KualaLumpur-Gamers)\n• File Directory: Documents\\SMK_Damansara_Project\\",
-        threatInferences: "• System path exposes the user's real name (Alex Tan) and exact birth year (2008).\n• School project folders reveal their precise institutional attendance matrix.\n• Active chat channels pin down narrow geographic proximity bounds.",
-        mitigations: "• Crop out application taskbars and user root directory paths before uploading screen grabs.\n• Mask or substitute absolute structural paths with generic placeholders (e.g., C:\\Users\\User)."
-      },
-      {
-        id: "social",
-        name: "Scenario 2: Outdoor Social Feed",
-        description: "A simple picture posted online that leaks real-world scheduling and tracking behaviors.",
-        url: "https://images.unsplash.com/photo-1611162617213-7d7a39e9b1d7?auto=format&fit=crop&w=600&q=80",
-        classification: "Social Grid Media Mobile Interface Capture",
-        extractedData: "• Status Caption Text: 'Heading home after basketball practice!'\n• Structural Background: Distinctive architectural bridge suspension column\n• Visual Badges: School athletic team emblem printed on uniform jersey",
-        threatInferences: "• Associating the caption with the school uniform gives a predator explicit confirmation of where the user is on training days.\n• Background landmarks allow an attacker to cross-reference mapping tools to pinpoint their exact walking commute route.",
-        mitigations: "• Never post real-time transit details or explicit training routines while alone in transit.\n• Use blur or pixelation tools to completely obscure background landmarks and clothing typography logos."
-      }
-    ];
-
-    function VisualAnalyzerApp() {
-      const [selectedScenario, setSelectedScenario] = useState(null);
-      const [isScanning, setIsScanning] = useState(false);
-      const [showReport, setShowReport] = useState(false);
-
-      const handleSelectScenario = (scenario) => {
-        setSelectedScenario(scenario);
-        setShowReport(false);
-        setIsScanning(false);
-      };
-
-      const handleRunScan = () => {
-        if (!selectedScenario) return;
-        setIsScanning(true);
-        // Build terminal suspense with an intentional 2.5-second processing lock delay
-        setTimeout(() => {
-          setIsScanning(false);
-          setShowReport(true);
-        }, 2500);
-      };
-
-      return (
-        <main className="p-4 sm:p-6 flex flex-col items-center justify-center min-h-screen">
-          <header className="max-w-2xl text-center mb-8">
-            <span className="text-[10px] font-mono tracking-widest text-red-400 bg-red-950/40 px-2 py-1 rounded border border-red-900/30 uppercase">
-              WIC2007 Diagnostic Extension
-            </span>
-            <h1 className="text-3xl font-extrabold tracking-tight mt-3 mb-2 text-transparent bg-clip-text bg-gradient-to-r from-red-400 to-amber-400">
-              Visual Footprint Snapshot Auditor
-            </h1>
-            <p className="text-zinc-400 text-xs sm:text-sm max-w-md mx-auto leading-relaxed">
-              Every inference below is entirely synthetic and rule-based. This module viscerally shows how automated scraping vectors parse metadata clues from raw images.
-            </p>
-          </header>
-
-          <section className="w-full max-w-2xl bg-zinc-900 border border-white/5 rounded-xl p-5 sm:p-6 space-y-6 shadow-2xl">
-            
-            {/* Scenario Buttons Grid */}
-            <div>
-              <h2 className="text-[10px] font-mono tracking-widest text-zinc-500 uppercase block mb-3">
-                Select Fictional Target Preset
-              </h2>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                {IMAGE_SCENARIOS.map((scenario) => (
-                  <button
-                    key={scenario.id}
-                    type="button"
-                    onClick={() => handleSelectScenario(scenario)}
-                    className={`text-left p-3 rounded-lg bg-zinc-950 border transition flex flex-col justify-between ${
-                      selectedScenario?.id === scenario.id ? 'border-amber-400 shadow-lg shadow-amber-500/5' : 'border-white/5 hover:border-zinc-700'
-                    }`}
-                  >
-                    <span className="text-xs font-bold text-zinc-200 block">{scenario.name}</span>
-                    <span className="text-[11px] text-zinc-500 mt-1 leading-normal">{scenario.description}</span>
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Simulated Viewfinder Box */}
-            <div className="border-2 border-dashed border-zinc-800 bg-zinc-950/60 rounded-lg p-4 flex flex-col items-center justify-center min-h-[200px] transition-all">
-              {selectedScenario ? (
-                <div className="relative group">
-                  <img 
-                    src={selectedScenario.url} 
-                    className="max-h-48 rounded object-contain border border-white/10 shadow-md" 
-                    alt="Simulation Content" 
-                  />
-                  {isScanning && (
-                    <div className="absolute inset-0 bg-red-950/20 backdrop-blur-xs flex items-center justify-center rounded">
-                      <div className="w-full h-1 bg-red-500 absolute top-0 animate-bounce"></div>
-                    </div>
-                  )}
-                </div>
-              ) : (
-                <div className="text-center space-y-1 font-mono text-[11px] text-zinc-600">
-                  <p> [ SYSTEM WAITING FOR IMAGE TARGET MATRIX INPUT ] </p>
-                  <p className="text-[10px] text-zinc-700">Select one of the educational mockup buttons above to initialize.</p>
-                </div>
-              )}
-            </div>
-
-            {/* Execution Trigger Button */}
-            {selectedScenario && !showReport && (
-              <button
-                type="button"
-                onClick={handleRunScan}
-                disabled={isScanning}
-                className="w-full py-3 bg-red-600 hover:bg-red-500 disabled:bg-zinc-800 text-zinc-950 font-mono font-bold text-xs rounded-lg transition tracking-wider disabled:text-zinc-500"
-              >
-                {isScanning ? "PARSING COMPUTER VISION EXTRACTION ARRAYS..." : "RUN THREAT ASSESSMENT ENGINE ➔"}
-              </button>
-            )}
-
-            {/* Synthetic Analysis Outputs */}
-            {showReport && selectedScenario && (
-              <div className="border-t border-white/5 pt-6 space-y-4 font-mono text-[11px] sm:text-xs animate-fadeIn">
-                <div className="flex items-center justify-between text-zinc-400 border-b border-white/5 pb-2 mb-2">
-                  <span>TARGET CLASSIFICATION:</span>
-                  <span className="text-amber-400 font-bold">{selectedScenario.classification}</span>
-                </div>
-
-                <div className="p-3.5 bg-zinc-950 rounded border border-red-500/20 shadow-inner">
-                  <h4 className="text-red-400 font-bold mb-1.5">[⚡ VULNERABILITY RECONNAISSANCE LOG]</h4>
-                  <p className="text-zinc-300 whitespace-pre-line leading-relaxed">{selectedScenario.extractedData}</p>
-                </div>
-
-                <div className="p-3.5 bg-zinc-950 rounded border border-amber-400/20 shadow-inner">
-                  <h4 className="text-amber-400 font-bold mb-1.5">[👁️ ATTACKER INFERENCE PROBABILITIES]</h4>
-                  <p className="text-zinc-300 whitespace-pre-line leading-relaxed">{selectedScenario.threatInferences}</p>
-                </div>
-
-                <div className="p-3.5 bg-zinc-950 rounded border border-emerald-500/20 shadow-inner font-sans text-sm">
-                  <h4 className="text-emerald-400 font-mono font-bold text-xs mb-1.5">[🛡️ DIGITAL HYGIENE COUNTERMEASURES]</h4>
-                  <p className="text-zinc-300 whitespace-pre-line leading-relaxed">{selectedScenario.mitigations}</p>
-                </div>
-
-                <div className="pt-2">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setSelectedScenario(null);
-                      setShowReport(false);
-                    }}
-                    className="w-full py-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-400 rounded transition font-mono text-[10px]"
-                  >
-                    Clear Audit Logs & Reset Container
-                  </button>
-                </div>
-              </div>
-            )}
-          </section>
-
-          <footer className="mt-8 text-[11px] font-mono text-zinc-600">
-            Privacy Assurance: No data files leave the browser environment.
-          </footer>
-        </main>
-      );
+function extractSnippet(posts, patterns) {
+  const lines = (posts || "").split(/\n/).map(s => s.trim()).filter(Boolean);
+  for (const line of lines) {
+    for (const pat of patterns) {
+      if (pat.test(line)) return line.length > 90 ? line.slice(0, 87) + "…" : line;
     }
+  }
+  return null;
+}
 
-    const root = ReactDOM.createRoot(document.getElementById('root'));
-    root.render(<VisualAnalyzerApp />);
-  </script>
+function birthYearFrom(username) {
+  if (!username) return null;
+  const u = username.toLowerCase();
+  const m4 = u.match(/(19\d{2}|20\d{2})/);
+  if (m4) return parseInt(m4[1], 10);
+  const m2 = u.match(/(?:^|[^0-9])(0[5-9]|1[0-5])(?:[^0-9]|$)/);
+  if (m2) return 2000 + parseInt(m2[1], 10);
+  return null;
+}
+function q(s) { return `"${s}"`; }
+
+const RULES = [
+  {
+    id: "school_sports_schedule", severity: 18, category: "schedule",
+    test: p => p.school && p.sport,
+    build: p => ({
+      title: `Fixed weekly schedule at ${p.school}`,
+      summary: `School + sport = predictable training days and pickup time at a known gate.`,
+      explain: `You told the public two things together: ${q(p.school)} and ${q(p.sport)}. School sport runs on a rota — usually the same two afternoons every week, same gate, same finishing time. An attacker doesn't have to follow you. They show up at ${p.school}'s gate on training days and wait for the ${p.sport.toLowerCase()} kids to come out.`,
+      chain: [`school: ${p.school}`, `+ sport: ${p.sport}`, `→ known location, fixed weekdays ~4–6pm`]
+    })
+  },
+  {
+    id: "username_birthyear", severity: 12, category: "identity",
+    test: p => birthYearFrom(p.username) !== null,
+    build: p => {
+      const year = birthYearFrom(p.username);
+      const age = year > 1900 ? (2026 - year) : null;
+      return {
+        title: `Your real age is in your handle (${q(p.username)})`,
+        summary: `Digits in your handle leak a likely birth year (~${age ?? "teen"}).`,
+        explain: `Your username ${q(p.username)} contains the digits ${year}. That reads as a birth year — making you about ${age ?? "a teen"}. A predator uses this to pick a fake age that feels safe (often 1–2 years older) and to time grooming language to your stage of school.`,
+        chain: [`username: ${p.username}`, `digits → birth year ${year}`, `→ likely age ${age ?? "13–16"}`]
+      };
+    }
+  },
+  {
+    id: "walking_home_alone", severity: 22, category: "physical",
+    test: p => extractSnippet(p.posts, WALK_PATTERNS) !== null,
+    build: p => {
+      const snip = extractSnippet(p.posts, WALK_PATTERNS);
+      const where = p.neighbourhood ? ` through ${p.neighbourhood}` : "";
+      const fromSchool = p.school ? ` from ${p.school}` : "";
+      return {
+        title: `You walk home alone — ${snip ? "in your own words" : "vulnerability window"}`,
+        summary: `A post confirms an unsupervised walk — narrows time, route, and corner to wait at.`,
+        explain: `Your post says: "${snip}". You've publicly confirmed an unsupervised walk${fromSchool}${where}. Combined with the school + sport schedule above, an attacker knows the day, the rough time, and the route. They don't need to follow you — they wait at one corner.`,
+        chain: [
+          `post: "${snip}"`,
+          p.school && `+ school: ${p.school}`,
+          p.neighbourhood && `+ area: ${p.neighbourhood}`,
+          `→ predictable solo route after practice`
+        ].filter(Boolean)
+      };
+    }
+  },
+  {
+    id: "neighbourhood_narrow", severity: 15, category: "location",
+    test: p => !!p.neighbourhood,
+    build: p => ({
+      title: `Home narrowed to ${p.neighbourhood}`,
+      summary: `Naming your area + school shrinks your home to a ~1–2 km radius.`,
+      explain: `You named ${q(p.neighbourhood)} in your profile. On its own that's a suburb, but cross-referenced with ${p.school ? `${p.school}'s catchment area` : "your school"} and the streets your sports team trains near, your home is within a 1–2 km radius — a manageable area to surveil.`,
+      chain: [`neighbourhood: ${p.neighbourhood}`, p.school && `+ school catchment: ${p.school}`, `→ home within ~1–2 km`].filter(Boolean)
+    })
+  },
+  {
+    id: "pet_sibling_password", severity: 14, category: "account",
+    test: p => p.pet && p.sibling,
+    build: p => ({
+      title: `${q(p.pet)} + ${q(p.sibling)} = your password reset answers`,
+      summary: `Pet and sibling names are the top two security-question answers — recovery attack ready.`,
+      explain: `You named your pet (${p.pet}) and your sibling (${p.sibling}) on a public profile. These are the two single most common "security question" answers ("first pet", "sibling's name"). An attacker can attempt account recovery on your email, IG, or TikTok using just these two strings.`,
+      chain: [`pet: ${p.pet}`, `+ sibling: ${p.sibling}`, `→ try as recovery answers on email/IG/TikTok`]
+    })
+  },
+  {
+    id: "hangout_meet_in_person", severity: 11, category: "physical",
+    test: p => !!p.hangout,
+    build: p => ({
+      title: `${p.hangout} — a safe-feeling place to 'bump into' you`,
+      summary: `A named regular hangout gives a low-risk venue to engineer a "coincidence".`,
+      explain: `You said you regularly go to ${q(p.hangout)}. That gives a predator a public, low-risk venue to engineer a "coincidence" — they see you a few times, smile, eventually start a chat. You feel they're a familiar local face, not a stranger.`,
+      chain: [`hangout: ${p.hangout}`, `→ low-risk venue for engineered first meeting`]
+    })
+  },
+  {
+    id: "school_real_name_guess", severity: 16, category: "identity",
+    test: p => p.school && p.username,
+    build: p => ({
+      title: `Real name reachable from ${q(p.username)} + ${p.school}`,
+      summary: `Handle + school name surfaces tagged team photos → real first and last name in minutes.`,
+      explain: `An attacker pastes ${q(p.username)} into Google with "${p.school}"${p.sport ? ` ${p.sport}` : ""}. Tagged photos, school sports pages, and friends' tagged posts surface your real first and last name within minutes. Most Malaysian school co-curricular pages and team photos list full names publicly.`,
+      chain: [`username: ${p.username}`, `+ school: ${p.school}`, p.sport && `+ sport: ${p.sport}`, `→ real name from tagged photos / team rosters`].filter(Boolean)
+    })
+  },
+  {
+    id: "emotional_hook", severity: 13, category: "emotional",
+    test: p => extractSnippet(p.posts, EMO_PATTERNS) !== null,
+    build: p => {
+      const snip = extractSnippet(p.posts, EMO_PATTERNS);
+      return {
+        title: `Emotional opening — your post: "${snip}"`,
+        summary: `Venting publicly hands a predator a tailored, empathetic opening line.`,
+        explain: `Your own words give a predator a script. After reading "${snip}", their opening DM isn't random — it's "I've been through that too, you're not alone." It feels uncannily understanding because they took it straight from your timeline.`,
+        chain: [`post: "${snip}"`, `→ tailored empathetic opening DM`]
+      };
+    }
+  },
+  {
+    id: "low_input_baseline", severity: 6, category: "general",
+    test: () => true,
+    build: p => ({
+      title: `Even ${q(p.username || "your handle")} alone is a starting point`,
+      summary: `Even a bare handle gives an attacker a personalised first DM.`,
+      explain: `Anything public — even just a handle${p.sport ? ` and the fact you play ${p.sport}` : ""} — gives an attacker a personalised opener. The first message feels less random ("hey, you on the ${p.sport || "team"}?"), so trust builds in days, not weeks.`,
+      chain: [`username: ${p.username || "(any handle)"}`, p.sport && `+ sport: ${p.sport}`, `→ personalised first DM`].filter(Boolean)
+    })
+  }
+];
+
+const SAMPLE_PROFILES = [
+  { 
+    name: "Scenario 1: Desktop Chat Capture (Discord)", 
+    isVisual: true,
+    imageUrl: "https://raw.githubusercontent.com/akxxtz/FootprintExpose/main/app/image_4ec0c2.jpg",
+    data: {
+      username: "sinliang030", age: "16", school: "broccoli 🥦 company guild", sport: "Gaming Node", neighbourhood: "Discord Client Subnet",
+      posts: "Active Member: mel 🍃 SDV tracked on server logs.\nExposed System channel anchor timestamp data point logged at 14:48.\nServer text matrix interaction channel caught on #general feed window.",
+      pet: "None", sibling: "None", hangout: "Online Discord #general Chat Interface Node"
+    } 
+  },
+  { 
+    name: "Scenario 2: Student Mobility Capture (Airlangga)", 
+    isVisual: true,
+    imageUrl: "https://raw.githubusercontent.com/akxxtz/FootprintExpose/main/app/image_4ecba1.jpg",
+    data: {
+      username: "youverynice_", age: "15", school: "Universitas Airlangga", sport: "SEGTA Exchange Program", neighbourhood: "Surabaya, Indonesia",
+      posts: "Balik dari program SEGTA @ Universitas Airlangga, penat gila tapi seronok 😮‍💨\nPeer handle visibility tags: @zxinnn_721 and @yxuanl__ listed in public timeline feed.\nPost timestamp record marked 31 December 2025.",
+      pet: "UNAIR Bag", sibling: "None", hangout: "UNAIR Campus Main Event Hall Hub"
+    } 
+  },
+  { name: "alex_runs_2010", data: {
+      username:"alex_runs_2010", age:"14", school:"Riverside High",
+      sport:"Cross-country team", neighbourhood:"Maple Park",
+      posts:["Walking home from practice in the rain again 😩","Mum and I had a huge fight, I hate it here","At the Bean Café with the team after the meet"].join("\n"),
+      pet:"Biscuit", sibling:"Jamie", hangout:"Bean Café" } },
+  { name: "danishfutsal09", data: {
+      username:"danishfutsal09", age:"15", school:"SMK Damansara Jaya",
+      sport:"Futsal team (school)", neighbourhood:"SS2, Petaling Jaya",
+      posts:["Latihan futsal habis dah, walking home from school sampai SS2 penat gila 😮‍💨","Lepak mamak Sri Melur lagi nanti malam, usual spot","Adik annoying gila harini, nak lari rumah je"].join("\n"),
+      pet:"Oreo", sibling:"Iman", hangout:"Mamak Sri Melur, SS2" } }
+];
+
+function buildLog(p, inferences) {
+  const log = ["Initializing OSINT Reconnaissance Framework...", "Loading identity string matching index vectors..."];
+  if (p.username) log.push(`Parsing handle matrix data points for source: [${p.username}]`);
+  if (p.school) log.push(`Cross-referencing institutional location metadata target parameters: [${p.school}]`);
+  inferences.forEach(inf => {
+    log.push(`[CRITICAL THREAT DETERMINED] ID: ${inf.id.toUpperCase()} - Severity Score: [${inf.severity}/25]`);
+  });
+  log.push("Reconnaissance assessment execution arrays completed.");
+  return log;
+}
+
+function App() {
+  const [screen, setScreen] = useState("landing"); 
+  const [profile, setProfile] = useState(null);
+  const [inferences, setInferences] = useState([]);
+  const [selectedVisualUrl, setSelectedVisualUrl] = useState(null);
+
+  function startFromProfile(prof, visualUrl = null) {
+    const scripted = runInference(prof);
+    setProfile(prof);
+    setInferences(scripted);
+    setSelectedVisualUrl(visualUrl);
+    setScreen("analysing");
+  }
+
+  return (
+    <div className="min-h-full flex flex-col justify-between">
+      <header className="border-b border-white/5 px-6 py-3 flex items-center justify-between sticky top-0 backdrop-blur bg-[#07080d]/70 z-10">
+        <button onClick={() => setScreen("landing")} className="flex items-center gap-2 group">
+          <div className="w-7 h-7 rounded-md bg-red-500/10 border border-red-500/40 flex items-center justify-center group-hover:bg-red-500/20 transition">
+            <span className="text-red-400 text-sm">◉</span>
+          </div>
+          <span className="text-sm tracking-wider mono text-zinc-300 group-hover:text-white">FOOTPRINT/EXPOSE</span>
+        </button>
+        <span className="mono text-[10px] px-2 py-1 rounded border border-white/10 text-zinc-400">Diagnostic Extension Sandbox</span>
+      </header>
+
+      {screen === "landing" && <Landing onStart={() => setScreen("form")} />}
+      {screen === "form" && <ProfileForm onSubmit={startFromProfile} />}
+      {screen === "analysing" && <Analysing profile={profile} inferences={inferences} visualUrl={selectedVisualUrl} onDone={() => setScreen("reveal")} />}
+      {screen === "reveal" && <Reveal profile={profile} inferences={inferences} visualUrl={selectedVisualUrl} onRestart={() => setScreen("landing")} />}
+
+      <footer className="text-center text-[11px] mono text-zinc-600 py-6 border-t border-white/5 bg-[#07080d]">
+        Educational demo framework built for co-curricular footprint visibility audits.
+      </footer>
+    </div>
+  );
+}
+
+function Landing({ onStart }) {
+  return (
+    <section className="relative flex-1 flex flex-col items-center justify-center text-center px-6 py-16">
+      <div className="absolute inset-0 scan-line opacity-40 pointer-events-none" />
+      <div className="eyebrow text-[10px] text-red-400 mb-6">Content warning · Digital Hygiene Audit</div>
+      <h1 className="text-5xl sm:text-7xl leading-[0.95] tracking-tight mb-6">
+        <span className="font-medium">They only need</span><br/>
+        <span className="display text-red-400 text-6xl sm:text-8xl">a few clues.</span>
+      </h1>
+      <p className="text-zinc-400 text-md max-w-xl mx-auto leading-relaxed mb-8">
+        Test standard profile fields or trigger our custom snapshot screenshot auditing presets to reveal how automated footprint scanners stitch public data vectors together.
+      </p>
+      <button onClick={onStart} className="px-6 py-3 rounded-md bg-red-500 hover:bg-red-400 text-black font-semibold transition glow-red">
+        Launch Investigation Engine →
+      </button>
+    </section>
+  );
+}
+
+function ProfileForm({ onSubmit }) {
+  const [p, setP] = useState({ username:"", age:"", school:"", sport:"", neighbourhood:"", posts:"", pet:"", sibling:"", hangout:"" });
+  const [activeVisual, setActiveVisual] = useState(null);
+  const minFilled = [p.username, p.school, p.sport].filter(Boolean).length >= 1;
+
+  function loadProfilePreset(preset) {
+    setP(preset.data);
+    setActiveVisual(preset.isVisual ? preset.imageUrl : null);
+  }
+
+  return (
+    <section className="max-w-4xl mx-auto px-6 py-10 flex-1 w-full">
+      <h2 className="text-2xl font-bold mb-2">Initialize Threat Profile Input Vector</h2>
+      <p className="text-zinc-400 text-xs mb-6">Select a prefilled mock target configuration or test with custom synthetic strings.</p>
+      
+      {/* Target Presets Selector */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-2 mb-6">
+        {SAMPLE_PROFILES.map((s) => (
+          <button key={s.name} type="button" onClick={() => loadProfilePreset(s)}
+            className="text-left p-2.5 rounded border border-white/5 bg-zinc-900/50 hover:border-amber-400/50 transition">
+            <span className="text-[10px] font-mono text-amber-400 block mb-0.5">{s.isVisual ? "👁️ VISUAL PRESET" : "📝 TEXT PRESET"}</span>
+            <span className="text-xs text-zinc-200 font-bold block truncate">{s.name}</span>
+          </button>
+        ))}
+      </div>
+
+      <div className="grid md:grid-cols-3 gap-6">
+        {/* Left Side Form Fields */}
+        <div className="md:col-span-2 grid sm:grid-cols-2 gap-3">
+          <Field label="Profile Username/Handle" value={p.username} onChange={(e) => setP({...p, username: e.target.value})} placeholder="sinliang030" />
+          <Field label="Age Range Matrix" value={p.age} onChange={(e) => setP({...p, age: e.target.value})} placeholder="16" />
+          <Field label="Institutional System / School" value={p.school} onChange={(e) => setP({...p, school: e.target.value})} placeholder="SMK Damansara" />
+          <Field label="Activity Vector / Sport" value={p.sport} onChange={(e) => setP({...p, sport: e.target.value})} placeholder="Futsal Team" />
+          <Field label="Locality Neighborhood Parameter" value={p.neighbourhood} onChange={(e) => setP({...p, neighbourhood: e.target.value})} placeholder="SS2, Petaling Jaya" />
+          <Field label="Target Public Hangout Site" value={p.hangout} onChange={(e) => setP({...p, hangout: e.target.value})} placeholder="Mamak Spot" />
+          <div className="sm:col-span-2">
+            <label className="block text-[10px] font-mono tracking-wider text-zinc-400 uppercase mb-1">Extracted Post Clues / Timeline Strings</label>
+            <textarea value={p.posts} onChange={(e) => setP({...p, posts: e.target.value})} rows={3} className="w-full bg-white/[0.03] border border-white/10 rounded p-2 text-xs focus:outline-none focus:border-red-500" />
+          </div>
+        </div>
+
+        {/* Right Side Live Viewfinder Box */}
+        <div className="bg-zinc-950 border border-white/5 rounded-xl p-4 flex flex-col items-center justify-center text-center">
+          <span className="text-[9px] font-mono text-zinc-500 tracking-widest block mb-2 uppercase">[ Active Viewfinder Container ]</span>
+          {activeVisual ? (
+            <img src={activeVisual} className="max-h-48 rounded border border-white/10 object-contain shadow-md" alt="Target interface" />
+          ) : (
+            <div className="p-6 border border-dashed border-zinc-800 rounded min-h-[160px] flex items-center justify-center text-[10px] font-mono text-zinc-600">
+              No visual screenshot layer currently attached to this input profile array matrix.
+            </div>
+          )}
+        </div>
+      </div>
+
+      <div className="mt-6 flex justify-end">
+        <button disabled={!minFilled} onClick={() => onSubmit(p, activeVisual)}
+          className={`px-6 py-2.5 rounded font-semibold text-xs tracking-wider font-mono ${minFilled ? "bg-red-500 text-black glow-red hover:bg-red-400" : "bg-zinc-800 text-zinc-500 cursor-not-allowed"}`}>
+          EXECUTE FOOTPRINT AUDIT ASSESSMENT ➔
+        </button>
+      </div>
+    </section>
+  );
+}
+
+function Field({ label, ...rest }) {
+  return (
+    <label className="block">
+      <span className="text-[10px] font-mono tracking-wider text-zinc-400 uppercase block mb-1">{label}</span>
+      <input {...rest} className="w-full bg-white/[0.03] border border-white/10 focus:border-red-500 focus:outline-none rounded px-3 py-1.5 text-xs text-zinc-100" />
+    </label>
+  );
+}
+
+function Analysing({ profile, inferences, visualUrl, onDone }) {
+  const [lines, setLines] = useState([]);
+  const logLines = useMemo(() => buildLog(profile, inferences), [profile, inferences]);
+
+  useEffect(() => {
+    let i = 0;
+    const interval = setInterval(() => {
+      i++;
+      setLines(logLines.slice(0, i));
+      if (i >= logLines.length) {
+        clearInterval(interval);
+        setTimeout(onDone, 1000);
+      }
+    }, 250);
+    return () => clearInterval(interval);
+  }, [logLines, onDone]);
+
+  return (
+    <section className="max-w-2xl mx-auto px-6 py-16 flex-1 w-full flex flex-col justify-center">
+      <div className="bg-black/60 border border-red-500/30 rounded-lg p-5 font-mono text-xs text-red-400 log overflow-y-auto max-h-96 space-y-1 shadow-2xl relative">
+        <div className="absolute top-2 right-3 w-2 h-2 rounded-full bg-red-500 animate-ping" />
+        {lines.map((line, idx) => (
+          <div key={idx} className="leading-relaxed select-none">{line}</div>
+        ))}
+        <div className="typing mt-2 text-zinc-400">Processing structural correlation indices...</div>
+      </div>
+    </section>
+  );
+}
+
+function Reveal({ profile, inferences, visualUrl, onRestart }) {
+  return (
+    <section className="max-w-4xl mx-auto px-6 py-10 flex-1 w-full space-y-6">
+      <div className="border-b border-white/5 pb-4">
+        <h2 className="text-3xl font-extrabold tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-red-400 to-amber-400">
+          Vulnerability Intelligence Assessment Report
+        </h2>
+        <p className="text-zinc-400 text-xs mt-1">Cross-referenced rule matches generated completely offline inside the active layout context.</p>
+      </div>
+
+      <div className="grid md:grid-cols-3 gap-6">
+        {/* Left Side: Audit Cards Details */}
+        <div className="md:col-span-2 space-y-3">
+          {inferences.length === 0 ? (
+            <p className="text-zinc-500 font-mono text-xs">No explicit safety threat correlations found for this parameter profile set baseline.</p>
+          ) : (
+            inferences.map((inf) => (
+              <div key={inf.id} className="bg-zinc-900 border border-white/5 rounded-lg p-4 font-mono text-xs space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-red-400 font-bold tracking-wide uppercase">[⚡ {inf.title}]</span>
+                  <span className="text-[10px] px-1.5 py-0.5 bg-red-950/50 text-red-400 border border-red-900/30 rounded font-bold">Severity: {inf.severity}/25</span>
+                </div>
+                <p className="text-zinc-300 font-sans text-xs leading-relaxed">{inf.explain}</p>
+                <div className="bg-black/40 border border-white/5 rounded p-2 text-[11px] text-amber-300 space-y-0.5">
+                  {inf.chain.map((c, i) => (
+                    <div key={i}>• {c}</div>
+                  ))}
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+
+        {/* Right Side: Image Context and Controls */}
+        <div className="space-y-4">
+          {visualUrl && (
+            <div className="bg-zinc-900 border border-white/5 rounded-lg p-3 text-center">
+              <span className="text-[9px] font-mono text-zinc-500 tracking-wider block mb-2 uppercase">[ Correlated Source Layer ]</span>
+              <img src={visualUrl} className="rounded w-full max-h-48 object-contain border border-white/10" alt="Audited source view" />
+            </div>
+          )}
+          
+          <div className="bg-zinc-900 border border-white/5 rounded-lg p-4 font-mono text-xs space-y-2">
+            <span className="text-emerald-400 font-bold block">[🛡️ CORE MITIGATION PRINCIPLE]</span>
+            <p className="text-zinc-300 font-sans text-xs leading-relaxed">
+              Treat all public usernames, handles, and shared capture files as generic costumes. Mask out channel trees, sidebar text arrays, location landmarks, and institutional credentials before sharing snaps with the public.
+            </p>
+          </div>
+
+          <button onClick={onRestart} className="w-full py-2.5 bg-zinc-800 hover:bg-zinc-700 font-mono font-bold text-xs rounded transition text-zinc-300">
+            Clear Audit Cache & Reset Container
+          </button>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function runInference(profile) {
+  const p = { ...profile, postsJoined: (profile.posts || "").toLowerCase() };
+  const built = [];
+  const seen = new Set();
+  for (const r of RULES) {
+    try {
+      if (!r.test(p)) continue;
+      if (seen.has(r.id)) continue;
+      seen.add(r.id);
+      const detail = r.build(p);
+      built.push({ id: r.id, severity: r.severity, category: r.category, ...detail });
+    } catch (_) {}
+  }
+  return built.sort((a, b) => b.severity - a.severity);
+}
+
+const root = ReactDOM.createRoot(document.getElementById('root'));
+root.render(<App />);
+</script>
 </body>
 </html>
