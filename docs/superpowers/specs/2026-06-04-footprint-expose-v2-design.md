@@ -86,6 +86,10 @@ Both modes converge on the **existing** screen flow:
 - **Request body (JSON):**
   - Text: `{ "mode": "text", "profile": { ...existing profile fields... } }`
   - Photo: `{ "mode": "photo", "images": ["<base64 jpeg>", ...] }`
+  - Caption: `{ "mode": "caption", "caption": "<text, ≤2000 chars>" }` — added to keep the
+    pre-existing **Caption Rewriter** tool (`CaptionAnalyzer`, contributed earlier)
+    working under the secure proxy. Returns top-level `{ attackerView, safeAlternative,
+    explanation }` (a different shape from text/photo, which return `inferences`/`extracted`).
 - **Behaviour:**
   - Reads `process.env.GEMINI_API_KEY`.
   - **Text:** reuses the existing `GEMINI_SYSTEM` instruction and the text prompt
