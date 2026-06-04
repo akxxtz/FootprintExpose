@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Footprint Expose - Visual Snapshot Audit</title>
+  <!-- Load React, ReactDOM, and Babel from CDNs to run without Node/npm -->
+  <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <!-- Load Tailwind CSS via CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-zinc-950 text-zinc-50 min-h-screen selection:bg-red-500 selection:text-zinc-950">
+
+  <div id="root"></div>
+
+  <script type="text/babel">
+    const { useState } = React;
+
+    // Prefilled, synthetic cybersecurity scenario datasets 
+    const IMAGE_SCENARIOS = [
+      {
+        id: "desktop",
+        name: "Scenario 1: Desktop IDE Capture",
+        description: "A common screenshot shared on coding forums that accidentally leaks environment system configurations.",
+        url: "https://images.unsplash.com/photo-1629654297299-c8506221ca97?auto=format&fit=crop&w=600&q=80",
+        classification: "Development Workspace Environment Screen Capture",
+        extractedData: "• System User String: C:\\Users\\Alex_Tan_2008\\\n• Open Applications: Discord App window showing active regional channel (#KualaLumpur-Gamers)\n• File Directory: Documents\\SMK_Damansara_Project\\",
+        threatInferences: "• System path exposes the user's real name (Alex Tan) and exact birth year (2008).\n• School project folders reveal their precise institutional attendance matrix.\n• Active chat channels pin down narrow geographic proximity bounds.",
+        mitigations: "• Crop out application taskbars and user root directory paths before uploading screen grabs.\n• Mask or substitute absolute structural paths with generic placeholders (e.g., C:\\Users\\User)."
+      },
+      {
+        id: "social",
+        name: "Scenario 2: Outdoor Social Feed",
+        description: "A simple picture posted online that leaks real-world scheduling and tracking behaviors.",
+        url: "https://images.unsplash.com/photo-1611162617213-7d7a39e9b1d7?auto=format&fit=crop&w=600&q=80",
+        classification: "Social Grid Media Mobile Interface Capture",
+        extractedData: "• Status Caption Text: 'Heading home after basketball practice!'\n• Structural Background: Distinctive architectural bridge suspension column\n• Visual Badges: School athletic team emblem printed on uniform jersey",
+        threatInferences: "• Associating the caption with the school uniform gives a predator explicit confirmation of where the user is on training days.\n• Background landmarks allow an attacker to cross-reference mapping tools to pinpoint their exact walking commute route.",
+        mitigations: "• Never post real-time transit details or explicit training routines while alone in transit.\n• Use blur or pixelation tools to completely obscure background landmarks and clothing typography logos."
+      }
+    ];
+
+    function VisualAnalyzerApp() {
+      const [selectedScenario, setSelectedScenario] = useState(null);
+      const [isScanning, setIsScanning] = useState(false);
+      const [showReport, setShowReport] = useState(false);
+
+      const handleSelectScenario = (scenario) => {
+        setSelectedScenario(scenario);
+        setShowReport(false);
+        setIsScanning(false);
+      };
+
+      const handleRunScan = () => {
+        if (!selectedScenario) return;
+        setIsScanning(true);
+        // Build terminal suspense with an intentional 2.5-second processing lock delay
+        setTimeout(() => {
+          setIsScanning(false);
+          setShowReport(true);
+        }, 2500);
+      };
+
+      return (
+        <main className="p-4 sm:p-6 flex flex-col items-center justify-center min-h-screen">
+          <header className="max-w-2xl text-center mb-8">
+            <span className="text-[10px] font-mono tracking-widest text-red-400 bg-red-950/40 px-2 py-1 rounded border border-red-900/30 uppercase">
+              WIC2007 Diagnostic Extension
+            </span>
+            <h1 className="text-3xl font-extrabold tracking-tight mt-3 mb-2 text-transparent bg-clip-text bg-gradient-to-r from-red-400 to-amber-400">
+              Visual Footprint Snapshot Auditor
+            </h1>
+            <p className="text-zinc-400 text-xs sm:text-sm max-w-md mx-auto leading-relaxed">
+              Every inference below is entirely synthetic and rule-based. This module viscerally shows how automated scraping vectors parse metadata clues from raw images.
+            </p>
+          </header>
+
+          <section className="w-full max-w-2xl bg-zinc-900 border border-white/5 rounded-xl p-5 sm:p-6 space-y-6 shadow-2xl">
+            
+            {/* Scenario Buttons Grid */}
+            <div>
+              <h2 className="text-[10px] font-mono tracking-widest text-zinc-500 uppercase block mb-3">
+                Select Fictional Target Preset
+              </h2>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {IMAGE_SCENARIOS.map((scenario) => (
+                  <button
+                    key={scenario.id}
+                    type="button"
+                    onClick={() => handleSelectScenario(scenario)}
+                    className={`text-left p-3 rounded-lg bg-zinc-950 border transition flex flex-col justify-between ${
+                      selectedScenario?.id === scenario.id ? 'border-amber-400 shadow-lg shadow-amber-500/5' : 'border-white/5 hover:border-zinc-700'
+                    }`}
+                  >
+                    <span className="text-xs font-bold text-zinc-200 block">{scenario.name}</span>
+                    <span className="text-[11px] text-zinc-500 mt-1 leading-normal">{scenario.description}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Simulated Viewfinder Box */}
+            <div className="border-2 border-dashed border-zinc-800 bg-zinc-950/60 rounded-lg p-4 flex flex-col items-center justify-center min-h-[200px] transition-all">
+              {selectedScenario ? (
+                <div className="relative group">
+                  <img 
+                    src={selectedScenario.url} 
+                    className="max-h-48 rounded object-contain border border-white/10 shadow-md" 
+                    alt="Simulation Content" 
+                  />
+                  {isScanning && (
+                    <div className="absolute inset-0 bg-red-950/20 backdrop-blur-xs flex items-center justify-center rounded">
+                      <div className="w-full h-1 bg-red-500 absolute top-0 animate-bounce"></div>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="text-center space-y-1 font-mono text-[11px] text-zinc-600">
+                  <p> [ SYSTEM WAITING FOR IMAGE TARGET MATRIX INPUT ] </p>
+                  <p className="text-[10px] text-zinc-700">Select one of the educational mockup buttons above to initialize.</p>
+                </div>
+              )}
+            </div>
+
+            {/* Execution Trigger Button */}
+            {selectedScenario && !showReport && (
+              <button
+                type="button"
+                onClick={handleRunScan}
+                disabled={isScanning}
+                className="w-full py-3 bg-red-600 hover:bg-red-500 disabled:bg-zinc-800 text-zinc-950 font-mono font-bold text-xs rounded-lg transition tracking-wider disabled:text-zinc-500"
+              >
+                {isScanning ? "PARSING COMPUTER VISION EXTRACTION ARRAYS..." : "RUN THREAT ASSESSMENT ENGINE ➔"}
+              </button>
+            )}
+
+            {/* Synthetic Analysis Outputs */}
+            {showReport && selectedScenario && (
+              <div className="border-t border-white/5 pt-6 space-y-4 font-mono text-[11px] sm:text-xs animate-fadeIn">
+                <div className="flex items-center justify-between text-zinc-400 border-b border-white/5 pb-2 mb-2">
+                  <span>TARGET CLASSIFICATION:</span>
+                  <span className="text-amber-400 font-bold">{selectedScenario.classification}</span>
+                </div>
+
+                <div className="p-3.5 bg-zinc-950 rounded border border-red-500/20 shadow-inner">
+                  <h4 className="text-red-400 font-bold mb-1.5">[⚡ VULNERABILITY RECONNAISSANCE LOG]</h4>
+                  <p className="text-zinc-300 whitespace-pre-line leading-relaxed">{selectedScenario.extractedData}</p>
+                </div>
+
+                <div className="p-3.5 bg-zinc-950 rounded border border-amber-400/20 shadow-inner">
+                  <h4 className="text-amber-400 font-bold mb-1.5">[👁️ ATTACKER INFERENCE PROBABILITIES]</h4>
+                  <p className="text-zinc-300 whitespace-pre-line leading-relaxed">{selectedScenario.threatInferences}</p>
+                </div>
+
+                <div className="p-3.5 bg-zinc-950 rounded border border-emerald-500/20 shadow-inner font-sans text-sm">
+                  <h4 className="text-emerald-400 font-mono font-bold text-xs mb-1.5">[🛡️ DIGITAL HYGIENE COUNTERMEASURES]</h4>
+                  <p className="text-zinc-300 whitespace-pre-line leading-relaxed">{selectedScenario.mitigations}</p>
+                </div>
+
+                <div className="pt-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSelectedScenario(null);
+                      setShowReport(false);
+                    }}
+                    className="w-full py-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-400 rounded transition font-mono text-[10px]"
+                  >
+                    Clear Audit Logs & Reset Container
+                  </button>
+                </div>
+              </div>
+            )}
+          </section>
+
+          <footer className="mt-8 text-[11px] font-mono text-zinc-600">
+            Privacy Assurance: No data files leave the browser environment.
+          </footer>
+        </main>
+      );
+    }
+
+    const root = ReactDOM.createRoot(document.getElementById('root'));
+    root.render(<VisualAnalyzerApp />);
+  </script>
+</body>
+</html>
