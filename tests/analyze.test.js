@@ -268,3 +268,32 @@ test("runAnalysis (caption) returns caption fields via injected fetch", async ()
   const out = await runAnalysis({ mode: "caption", caption: "x" }, { apiKey: "K", fetchImpl });
   assert.equal(out.safeAlternative, "b");
 });
+
+test("validateRequest rejects an over-long caption", () => {
+  const r = validateRequest({ mode: "caption", caption: "x".repeat(2001) });
+  assert.equal(r.ok, false);
+  assert.equal(r.status, 413);
+});
+
+test("normalizeCaption throws on non-JSON text", () => {
+  const gj = { candidates: [{ content: { parts: [{ text: "not json" }] } }] };
+  assert.throws(() => normalizeCaption(gj), /non-JSON/);
+});
+
+test("normalizeCaption throws 502 when all fields are empty/missing", () => {
+  const gj = { candidates: [{ content: { parts: [{ text: JSON.stringify({}) }] } }] };
+  assert.throws(() => normalizeCaption(gj), /no usable fields/);
+});
+
+test("runAnalysis (caption) returns all three fields", async () => {
+  const fetchImpl = async () => ({
+    ok: true,
+    json: async () => ({ candidates: [{ content: { parts: [{ text: JSON.stringify({
+      attackerView: "a", safeAlternative: "b", explanation: "c"
+    }) }] } }] })
+  });
+  const out = await runAnalysis({ mode: "caption", caption: "x" }, { apiKey: "K", fetchImpl });
+  assert.equal(out.attackerView, "a");
+  assert.equal(out.safeAlternative, "b");
+  assert.equal(out.explanation, "c");
+});

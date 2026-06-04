@@ -21,6 +21,9 @@ export function validateRequest(body) {
     if (typeof body.caption !== "string" || !body.caption.trim()) {
       return { ok: false, status: 400, error: "caption mode requires a non-empty caption string." };
     }
+    if (body.caption.length > 2000) {
+      return { ok: false, status: 413, error: "Caption too long (max 2000 characters)." };
+    }
     return { ok: true };
   }
   // photo
@@ -188,9 +191,15 @@ export function normalizeResult(geminiJson) {
 
 export function normalizeCaption(geminiJson) {
   const parsed = parseGeminiText(geminiJson);
-  return {
-    attackerView: String(parsed.attackerView || ""),
-    safeAlternative: String(parsed.safeAlternative || ""),
-    explanation: String(parsed.explanation || "")
+  const out = {
+    attackerView: String(parsed.attackerView ?? ""),
+    safeAlternative: String(parsed.safeAlternative ?? ""),
+    explanation: String(parsed.explanation ?? "")
   };
+  if (!out.attackerView && !out.safeAlternative && !out.explanation) {
+    const e = new Error("Caption analysis returned no usable fields.");
+    e.status = 502;
+    throw e;
+  }
+  return out;
 }
