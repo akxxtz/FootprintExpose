@@ -8,12 +8,18 @@ export function validateRequest(body) {
     return { ok: false, status: 400, error: "Missing request body." };
   }
   const { mode } = body;
-  if (mode !== "text" && mode !== "photo") {
-    return { ok: false, status: 400, error: "mode must be 'text' or 'photo'." };
+  if (mode !== "text" && mode !== "photo" && mode !== "caption") {
+    return { ok: false, status: 400, error: "mode must be 'text', 'photo', or 'caption'." };
   }
   if (mode === "text") {
     if (!body.profile || typeof body.profile !== "object" || Array.isArray(body.profile)) {
       return { ok: false, status: 400, error: "text mode requires a profile object." };
+    }
+    return { ok: true };
+  }
+  if (mode === "caption") {
+    if (typeof body.caption !== "string" || !body.caption.trim()) {
+      return { ok: false, status: 400, error: "caption mode requires a non-empty caption string." };
     }
     return { ok: true };
   }
@@ -71,11 +77,23 @@ const PHOTO_SCHEMA = {
   required: ["extracted", "inferences"]
 };
 
+const CAPTION_SCHEMA = {
+  type: "OBJECT",
+  properties: {
+    attackerView: { type: "STRING" },
+    safeAlternative: { type: "STRING" },
+    explanation: { type: "STRING" }
+  },
+  required: ["attackerView", "safeAlternative", "explanation"]
+};
+
+const CAPTION_SYSTEM = `You are a cybersecurity privacy expert acting as a safe-posting filter for teenagers. Rewrite the user's social-media caption to be safe from online predators while keeping the original teen tone, slang, and emojis. Strip real-time locations, exact routines, school/team names, and identifiable details; neutralise emotional vulnerability. Respond with three fields: attackerView (one sentence on what a predator infers from the ORIGINAL caption), safeAlternative (the rewritten predator-safe caption), explanation (a short why-the-original-was-risky note).`;
+
 const TEXT_SYSTEM = `You are a child-safety analyst running an educational simulator. The user submitted a deliberately fake teen social profile. Enumerate the specific inferences a predator could draw, grounded ONLY in the fields provided. Never invent facts. Output 4-8 distinct inferences ranked by severity (1-25). Each inference's chain must cite the exact field values used. Each chain's final step must start with "→" and state the predator's conclusion.`;
 
 const PHOTO_SYSTEM = `You are a child-safety analyst running an educational simulator. The user uploaded one or more (fictional/sample) images a teen might post publicly. These may be plain photos OR screenshots of social posts (e.g. Instagram) where on-screen text is visible. First, in "extracted", list every concrete detail visible across ALL images as {label, value} pairs — combine clues across images. Read and include BOTH: (a) any on-screen UI text — username/handle, display name, caption, hashtags, location tag, timestamp, commenter usernames, comment text; and (b) physical scene details — school crest, street sign, sports kit, house number, reflections, time-of-day, recognisable landmarks. Then in "inferences", enumerate 4-8 specific things a predator could conclude, ranked by severity (1-25), each chain citing which visible detail(s) it used and ending with a "→" conclusion. Ground everything ONLY in what is actually visible/legible. Never invent.`;
 
-export function buildGeminiBody({ mode, profile, images }) {
+export function buildGeminiBody({ mode, profile, images, caption }) {
   if (mode === "text") {
     return {
       systemInstruction: { parts: [{ text: TEXT_SYSTEM }] },
@@ -85,6 +103,13 @@ export function buildGeminiBody({ mode, profile, images }) {
 PROFILE:
 ${JSON.stringify(profile, null, 2)}` }] }],
       generationConfig: { responseMimeType: "application/json", responseSchema: TEXT_SCHEMA, temperature: 0.6 }
+    };
+  }
+  if (mode === "caption") {
+    return {
+      systemInstruction: { parts: [{ text: CAPTION_SYSTEM }] },
+      contents: [{ role: "user", parts: [{ text: `Rewrite this caption:\n\n${caption}` }] }],
+      generationConfig: { responseMimeType: "application/json", responseSchema: CAPTION_SCHEMA, temperature: 0.7 }
     };
   }
   // photo
@@ -118,7 +143,8 @@ export async function runAnalysis(input, { apiKey, fetchImpl = fetch } = {}) {
     err.status = 502;
     throw err;
   }
-  return normalizeResult(await res.json());
+  const json = await res.json();
+  return input.mode === "caption" ? normalizeCaption(json) : normalizeResult(json);
 }
 
 export default async function handler(req, res) {
@@ -142,15 +168,15 @@ export default async function handler(req, res) {
 
 function safeParse(s) { try { return JSON.parse(s); } catch { return null; } }
 
-export function normalizeResult(geminiJson) {
+function parseGeminiText(geminiJson) {
   const text = geminiJson?.candidates?.[0]?.content?.parts?.[0]?.text;
   if (!text) { const e = new Error("Empty response from Gemini."); e.status = 502; throw e; }
-  let parsed;
-  try {
-    parsed = JSON.parse(text);
-  } catch {
-    const e = new Error("Gemini returned non-JSON text."); e.status = 502; throw e;
-  }
+  try { return JSON.parse(text); }
+  catch { const e = new Error("Gemini returned non-JSON text."); e.status = 502; throw e; }
+}
+
+export function normalizeResult(geminiJson) {
+  const parsed = parseGeminiText(geminiJson);
   const inferences = (Array.isArray(parsed.inferences) ? parsed.inferences : [])
     .filter(i => i && i.title && i.explain && Array.isArray(i.chain))
     .map(i => ({ ...i, severity: Math.max(1, Math.min(25, parseInt(i.severity, 10) || 5)) }))
@@ -158,4 +184,13 @@ export function normalizeResult(geminiJson) {
     .slice(0, 8);
   const extracted = Array.isArray(parsed.extracted) ? parsed.extracted : [];
   return { inferences, extracted };
+}
+
+export function normalizeCaption(geminiJson) {
+  const parsed = parseGeminiText(geminiJson);
+  return {
+    attackerView: String(parsed.attackerView || ""),
+    safeAlternative: String(parsed.safeAlternative || ""),
+    explanation: String(parsed.explanation || "")
+  };
 }

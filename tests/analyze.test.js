@@ -224,3 +224,47 @@ test("handler returns a generic 500 without leaking the env var name when key mi
     if (prev !== undefined) process.env.GEMINI_API_KEY = prev;
   }
 });
+
+import { normalizeCaption } from "../api/analyze.js";
+
+test("validateRequest rejects caption mode without caption", () => {
+  assert.equal(validateRequest({ mode: "caption" }).status, 400);
+  assert.equal(validateRequest({ mode: "caption", caption: "   " }).status, 400);
+});
+
+test("validateRequest accepts caption mode with a caption", () => {
+  assert.equal(validateRequest({ mode: "caption", caption: "walking home" }).ok, true);
+});
+
+test("buildGeminiBody (caption) includes the caption and a caption schema", () => {
+  const body = buildGeminiBody({ mode: "caption", caption: "walking home from practice" });
+  const parts = body.contents[0].parts;
+  assert.ok(parts.some(p => typeof p.text === "string" && p.text.includes("walking home from practice")));
+  const props = body.generationConfig.responseSchema.properties;
+  assert.ok(props.attackerView && props.safeAlternative && props.explanation);
+});
+
+test("normalizeCaption returns the three caption fields", () => {
+  const gj = { candidates: [{ content: { parts: [{ text: JSON.stringify({
+    attackerView: "reveals route", safeAlternative: "safe text", explanation: "why"
+  }) }] } }] };
+  const out = normalizeCaption(gj);
+  assert.equal(out.attackerView, "reveals route");
+  assert.equal(out.safeAlternative, "safe text");
+  assert.equal(out.explanation, "why");
+});
+
+test("normalizeCaption throws on empty candidates", () => {
+  assert.throws(() => normalizeCaption({ candidates: [] }));
+});
+
+test("runAnalysis (caption) returns caption fields via injected fetch", async () => {
+  const fetchImpl = async () => ({
+    ok: true,
+    json: async () => ({ candidates: [{ content: { parts: [{ text: JSON.stringify({
+      attackerView: "a", safeAlternative: "b", explanation: "c"
+    }) }] } }] })
+  });
+  const out = await runAnalysis({ mode: "caption", caption: "x" }, { apiKey: "K", fetchImpl });
+  assert.equal(out.safeAlternative, "b");
+});
