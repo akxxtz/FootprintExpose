@@ -39,12 +39,12 @@ const INFERENCE_ITEM = {
   type: "OBJECT",
   properties: {
     id: { type: "STRING" },
-    severity: { type: "INTEGER" },
+    severity: { type: "INTEGER", minimum: 1, maximum: 25 },
     category: { type: "STRING", enum: ["schedule","identity","physical","location","account","emotional","general"] },
     title: { type: "STRING" },
     summary: { type: "STRING" },
     explain: { type: "STRING" },
-    chain: { type: "ARRAY", items: { type: "STRING" } }
+    chain: { type: "ARRAY", items: { type: "STRING" }, minItems: 2, maxItems: 4 }
   },
   required: ["id","severity","category","title","summary","explain","chain"]
 };
@@ -89,7 +89,7 @@ ${JSON.stringify(profile, null, 2)}` }] }],
   }
   // photo
   const parts = [{ text: "Analyse these images together. Fill extracted[] with observable details, then inferences[] as instructed." }];
-  for (const data of images) parts.push({ inlineData: { mimeType: "image/jpeg", data } });
+  for (const data of (images ?? [])) parts.push({ inlineData: { mimeType: "image/jpeg", data } });
   return {
     systemInstruction: { parts: [{ text: PHOTO_SYSTEM }] },
     contents: [{ role: "user", parts }],

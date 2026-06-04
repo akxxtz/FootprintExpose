@@ -90,3 +90,17 @@ test("buildGeminiBody (photo) schema includes an extracted field", () => {
   const body = buildGeminiBody({ mode: "photo", images: ["AAAA"] });
   assert.ok(body.generationConfig.responseSchema.properties.extracted);
 });
+
+test("buildGeminiBody (photo) tolerates missing images array", () => {
+  const body = buildGeminiBody({ mode: "photo" });
+  const inline = body.contents[0].parts.filter(p => p.inlineData);
+  assert.equal(inline.length, 0); // no images, but no throw
+  assert.ok(body.contents[0].parts.some(p => typeof p.text === "string"));
+});
+
+test("INFERENCE_ITEM severity is bounded 1-25 in the schema", () => {
+  const body = buildGeminiBody({ mode: "text", profile: { username: "x" } });
+  const sev = body.generationConfig.responseSchema.properties.inferences.items.properties.severity;
+  assert.equal(sev.minimum, 1);
+  assert.equal(sev.maximum, 25);
+});
