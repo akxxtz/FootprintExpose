@@ -1,0 +1,1019 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Footprint Expose — what they can already see</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Space+Grotesk:wght@300;400;500;600;700&family=JetBrains+Mono:wght@300;400;500;700&display=swap" rel="stylesheet">
+<style>
+  html, body, #root { height: 100%; }
+  body { background:#07080d; color:#e6e7eb;
+         font-family: "Space Grotesk", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+         font-feature-settings: "ss01", "cv11"; }
+  .mono { font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-feature-settings: "zero", "ss02"; }
+  .serif { font-family: "Instrument Serif", "Times New Roman", serif; font-weight: 400; }
+  h1, h2, h3 { letter-spacing: -0.02em; }
+  .display { font-family: "Instrument Serif", serif; font-style: italic; font-weight: 400; letter-spacing: -0.025em; }
+  .eyebrow { font-family: "JetBrains Mono", monospace; font-weight: 400; letter-spacing: 0.32em; text-transform: uppercase; }
+  .scan-line { background: repeating-linear-gradient(0deg, rgba(255,255,255,.03) 0 2px, transparent 2px 4px); }
+  .glow-red { box-shadow: 0 0 24px rgba(239,68,68,.35), inset 0 0 12px rgba(239,68,68,.15); }
+  .node-pop { animation: pop .45s cubic-bezier(.2,1.4,.4,1) both; }
+  @keyframes pop { from { transform: scale(.4); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+  .line-draw { stroke-dasharray: 400; stroke-dashoffset: 400; animation: draw .7s ease-out forwards; }
+  @keyframes draw { to { stroke-dashoffset: 0; } }
+  .pulse-dot { animation: pulse 1.4s ease-in-out infinite; }
+  @keyframes pulse { 0%,100% { opacity: .35 } 50% { opacity: 1 } }
+  .typing::after { content: "▍"; animation: blink 1s steps(1) infinite; }
+  @keyframes blink { 50% { opacity: 0 } }
+  /* Custom scrollbar for the analyser log */
+  .log::-webkit-scrollbar { width: 6px; }
+  .log::-webkit-scrollbar-thumb { background: #1f2937; border-radius: 3px; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+
+<script type="text/babel" data-presets="react">
+const { useState, useEffect, useMemo, useRef } = React;
+
+/* ------------------------------------------------------------------ */
+/* Inference rules — kept inline so the file runs from file:// too.    */
+/* Mirror of inferenceRules.json. Edit either; this is the source of   */
+/* truth for the bundled single-file build.                            */
+/* ------------------------------------------------------------------ */
+/* Helpers used by rules */
+const WALK_PATTERNS = [
+  /walk(ing)? (home|back)/i, /heading home/i, /on my way home/i,
+  /balik (sekolah|rumah)/i, /jalan kaki/i, /jalan balik/i
+];
+const EMO_PATTERNS = [
+  /\b(tired|lonely|fight|argue|arguing|hate|sad|bored|nobody|no one|alone)\b/i,
+  /\b(penat|marah|sedih|bosan|lari rumah|annoying|takde sesiapa)\b/i
+];
+function extractSnippet(posts, patterns) {
+  const lines = (posts || "").split(/\n/).map(s => s.trim()).filter(Boolean);
+  for (const line of lines) {
+    for (const pat of patterns) {
+      if (pat.test(line)) return line.length > 90 ? line.slice(0, 87) + "…" : line;
+    }
+  }
+  return null;
+}
+function birthYearFrom(username) {
+  if (!username) return null;
+  const u = username.toLowerCase();
+  const m4 = u.match(/(19\d{2}|20\d{2})/);
+  if (m4) return parseInt(m4[1], 10);
+  const m2 = u.match(/(?:^|[^0-9])(0[5-9]|1[0-5])(?:[^0-9]|$)/);
+  if (m2) return 2000 + parseInt(m2[1], 10);
+  return null;
+}
+function q(s) { return `"${s}"`; }
+
+const RULES = [
+  {
+    id: "school_sports_schedule", severity: 18, category: "schedule",
+    test: p => p.school && p.sport,
+    build: p => ({
+      title: `Fixed weekly schedule at ${p.school}`,
+      summary: `School + sport = predictable training days and pickup time at a known gate.`,
+      explain: `You told the public two things together: ${q(p.school)} and ${q(p.sport)}. School sport runs on a rota — usually the same two afternoons every week, same gate, same finishing time. An attacker doesn't have to follow you. They show up at ${p.school}'s gate on training days and wait for the ${p.sport.toLowerCase()} kids to come out.`,
+      chain: [`school: ${p.school}`, `+ sport: ${p.sport}`, `→ known location, fixed weekdays ~4–6pm`]
+    })
+  },
+  {
+    id: "username_birthyear", severity: 12, category: "identity",
+    test: p => birthYearFrom(p.username) !== null,
+    build: p => {
+      const year = birthYearFrom(p.username);
+      const age = year > 1900 ? (2026 - year) : null;
+      return {
+        title: `Your real age is in your handle (${q(p.username)})`,
+        summary: `Digits in your handle leak a likely birth year (~${age ?? "teen"}).`,
+        explain: `Your username ${q(p.username)} contains the digits ${year}. That reads as a birth year — making you about ${age ?? "a teen"}. A predator uses this to pick a fake age that feels safe (often 1–2 years older) and to time grooming language to your stage of school.`,
+        chain: [`username: ${p.username}`, `digits → birth year ${year}`, `→ likely age ${age ?? "13–16"}`]
+      };
+    }
+  },
+  {
+    id: "walking_home_alone", severity: 22, category: "physical",
+    test: p => extractSnippet(p.posts, WALK_PATTERNS) !== null,
+    build: p => {
+      const snip = extractSnippet(p.posts, WALK_PATTERNS);
+      const where = p.neighbourhood ? ` through ${p.neighbourhood}` : "";
+      const fromSchool = p.school ? ` from ${p.school}` : "";
+      return {
+        title: `You walk home alone — ${snip ? "in your own words" : "vulnerability window"}`,
+        summary: `A post confirms an unsupervised walk — narrows time, route, and corner to wait at.`,
+        explain: `Your post says: "${snip}". You've publicly confirmed an unsupervised walk${fromSchool}${where}. Combined with the school + sport schedule above, an attacker knows the day, the rough time, and the route. They don't need to follow you — they wait at one corner.`,
+        chain: [
+          `post: "${snip}"`,
+          p.school && `+ school: ${p.school}`,
+          p.neighbourhood && `+ area: ${p.neighbourhood}`,
+          `→ predictable solo route after practice`
+        ].filter(Boolean)
+      };
+    }
+  },
+  {
+    id: "neighbourhood_narrow", severity: 15, category: "location",
+    test: p => !!p.neighbourhood,
+    build: p => ({
+      title: `Home narrowed to ${p.neighbourhood}`,
+      summary: `Naming your area + school shrinks your home to a ~1–2 km radius.`,
+      explain: `You named ${q(p.neighbourhood)} in your profile. On its own that's a suburb, but cross-referenced with ${p.school ? `${p.school}'s catchment area` : "your school"} and the streets your sports team trains near, your home is within a 1–2 km radius — a manageable area to surveil.`,
+      chain: [`neighbourhood: ${p.neighbourhood}`, p.school && `+ school catchment: ${p.school}`, `→ home within ~1–2 km`].filter(Boolean)
+    })
+  },
+  {
+    id: "pet_sibling_password", severity: 14, category: "account",
+    test: p => p.pet && p.sibling,
+    build: p => ({
+      title: `${q(p.pet)} + ${q(p.sibling)} = your password reset answers`,
+      summary: `Pet and sibling names are the top two security-question answers — recovery attack ready.`,
+      explain: `You named your pet (${p.pet}) and your sibling (${p.sibling}) on a public profile. These are the two single most common "security question" answers ("first pet", "sibling's name"). An attacker can attempt account recovery on your email, IG, or TikTok using just these two strings.`,
+      chain: [`pet: ${p.pet}`, `+ sibling: ${p.sibling}`, `→ try as recovery answers on email/IG/TikTok`]
+    })
+  },
+  {
+    id: "hangout_meet_in_person", severity: 11, category: "physical",
+    test: p => !!p.hangout,
+    build: p => ({
+      title: `${p.hangout} — a safe-feeling place to 'bump into' you`,
+      summary: `A named regular hangout gives a low-risk venue to engineer a "coincidence".`,
+      explain: `You said you regularly go to ${q(p.hangout)}. That gives a predator a public, low-risk venue to engineer a "coincidence" — they see you a few times, smile, eventually start a chat. You feel they're a familiar local face, not a stranger.`,
+      chain: [`hangout: ${p.hangout}`, `→ low-risk venue for engineered first meeting`]
+    })
+  },
+  {
+    id: "school_real_name_guess", severity: 16, category: "identity",
+    test: p => p.school && p.username,
+    build: p => ({
+      title: `Real name reachable from ${q(p.username)} + ${p.school}`,
+      summary: `Handle + school name surfaces tagged team photos → real first and last name in minutes.`,
+      explain: `An attacker pastes ${q(p.username)} into Google with "${p.school}"${p.sport ? ` ${p.sport}` : ""}. Tagged photos, school sports pages, and friends' tagged posts surface your real first and last name within minutes. Most Malaysian school co-curricular pages and team photos list full names publicly.`,
+      chain: [`username: ${p.username}`, `+ school: ${p.school}`, p.sport && `+ sport: ${p.sport}`, `→ real name from tagged photos / team rosters`].filter(Boolean)
+    })
+  },
+  {
+    id: "emotional_hook", severity: 13, category: "emotional",
+    test: p => extractSnippet(p.posts, EMO_PATTERNS) !== null,
+    build: p => {
+      const snip = extractSnippet(p.posts, EMO_PATTERNS);
+      return {
+        title: `Emotional opening — your post: "${snip}"`,
+        summary: `Venting publicly hands a predator a tailored, empathetic opening line.`,
+        explain: `Your own words give a predator a script. After reading "${snip}", their opening DM isn't random — it's "I've been through that too, you're not alone." It feels uncannily understanding because they took it straight from your timeline.`,
+        chain: [`post: "${snip}"`, `→ tailored empathetic opening DM`]
+      };
+    }
+  },
+  {
+    id: "low_input_baseline", severity: 6, category: "general",
+    test: () => true,
+    build: p => ({
+      title: `Even ${q(p.username || "your handle")} alone is a starting point`,
+      summary: `Even a bare handle gives an attacker a personalised first DM.`,
+      explain: `Anything public — even just a handle${p.sport ? ` and the fact you play ${p.sport}` : ""} — gives an attacker a personalised opener. The first message feels less random ("hey, you on the ${p.sport || "team"}?"), so trust builds in days, not weeks.`,
+      chain: [`username: ${p.username || "(any handle)"}`, p.sport && `+ sport: ${p.sport}`, `→ personalised first DM`].filter(Boolean)
+    })
+  },
+];
+
+/* "Safer alternative" advice keyed off the same input fields. */
+const SAFER = {
+  username: "Pick a handle with no birth year, school, sport, or first name. Treat it like a costume, not a name tag.",
+  school:   "Don't put your school in your bio. Mention it only in DMs to people you know in person.",
+  sport:    "Don't pair sport + school in public posts. 'Had a good session' beats 'Practice at [School] every Tue/Thu'.",
+  neighbourhood: "Skip neighbourhood names. 'Out and about' is enough.",
+  posts:    "Re-read posts and remove anything time-and-place specific (route, gate, after-school job).",
+  pet:      "Pet names are common security-question answers. Don't post them, and don't use them as passwords.",
+  sibling:  "Same as pet names — keep family names off public profiles.",
+  hangout:  "Don't name the cafe / park / mall you go to every week. Variety is safety.",
+  age:      "You don't have to confirm your age in your bio. Let it be ambiguous.",
+};
+
+const SAMPLE_PROFILES = [
+  { name: "alex_runs_2010", data: {
+      username:"alex_runs_2010", age:"14", school:"Riverside High",
+      sport:"Cross-country team", neighbourhood:"Maple Park",
+      posts:["Walking home from practice in the rain again 😩","Mum and I had a huge fight, I hate it here","At the Bean Café with the team after the meet"].join("\n"),
+      pet:"Biscuit", sibling:"Jamie", hangout:"Bean Café" } },
+  { name: "sammyhoops07", data: {
+      username:"sammyhoops07", age:"15", school:"Northgate Secondary",
+      sport:"Basketball", neighbourhood:"Eastfield",
+      posts:["Tired after 3 hours of drills","Heading home, anyone want food?",""].join("\n"),
+      pet:"", sibling:"", hangout:"" } },
+  { name: "danishfutsal09", data: {
+      username:"danishfutsal09", age:"15", school:"SMK Damansara Jaya",
+      sport:"Futsal team (school)", neighbourhood:"SS2, Petaling Jaya",
+      posts:["Latihan futsal habis dah, walking home from school sampai SS2 penat gila 😮‍💨","Lepak mamak Sri Melur lagi nanti malam, usual spot","Adik annoying gila harini, nak lari rumah je"].join("\n"),
+      pet:"Oreo", sibling:"Iman", hangout:"Mamak Sri Melur, SS2" } },
+  { name: "adam_fc15", data: {
+      username:"adam_fc15", age:"15", school:"SMK Cyberjaya",
+      sport:"Football team", neighbourhood:"Cyberjaya",
+      posts:["Lepak CC luuu main valo ngan geng","Sial la mak aku selalu marah aku je","best do one piece"].join("\n"),
+      pet:"Bon", sibling:"Ali", hangout:"CC Metro" } },
+  { name: "qissyxoxo_08", data: {
+      username:"qissyxoxo_08", age:"14", school:"SMK Taman Selasa, Kulim",
+      sport:"Netball school team", neighbourhood:"Taman Selasa, Kulim, Kedah",
+      posts:["Balik sekolah jalan kaki lagi sebab abah kerja shift, panas gila Kulim ni 🥵","Lepak AEON Kulim after practice every Thursday, jumpa geng netball","Mama marah lagi, sometimes rasa macam nobody understands"].join("\n"),
+      pet:"Tompok", sibling:"Aisyah", hangout:"AEON Mall Kulim" } },
+];
+
+/* ------------------------------------------------------------------ */
+/* Gemini-backed inference (with scripted fallback)                    */
+/* ------------------------------------------------------------------ */
+const GEMINI_MODEL = "gemini-2.5-flash";
+const GEMINI_KEY_STORAGE = "ftpx_gemini_key";
+
+function getApiKey() {
+  try { return sessionStorage.getItem(GEMINI_KEY_STORAGE) || ""; } catch { return ""; }
+}
+function setApiKey(v) {
+  try {
+    if (v) sessionStorage.setItem(GEMINI_KEY_STORAGE, v);
+    else sessionStorage.removeItem(GEMINI_KEY_STORAGE);
+    // Clear any key left behind by older localStorage-based builds.
+    localStorage.removeItem(GEMINI_KEY_STORAGE);
+  } catch {}
+}
+
+const GEMINI_SYSTEM = `You are a child-safety analyst running an educational simulator. The user has just submitted a deliberately fake teen social profile. Your job: enumerate the specific inferences a predator could draw, grounded ONLY in the fields actually provided. Never invent facts not present in the profile. Be direct, second-person, non-sensational. Output 4-8 distinct inferences ranked by severity (1-25). Each inference's evidence chain must cite the exact field values it used.`;
+
+const GEMINI_SCHEMA = {
+  type: "OBJECT",
+  properties: {
+    inferences: {
+      type: "ARRAY",
+      items: {
+        type: "OBJECT",
+        properties: {
+          id: { type: "STRING" },
+          severity: { type: "INTEGER" },
+          category: { type: "STRING", enum: ["schedule","identity","physical","location","account","emotional","general"] },
+          title: { type: "STRING" },
+          summary: { type: "STRING" },
+          explain: { type: "STRING" },
+          chain: { type: "ARRAY", items: { type: "STRING" } }
+        },
+        required: ["id","severity","category","title","summary","explain","chain"]
+      }
+    }
+  },
+  required: ["inferences"]
+};
+
+async function runInferenceGemini(profile, key) {
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${encodeURIComponent(key)}`;
+  const body = {
+    systemInstruction: { parts: [{ text: GEMINI_SYSTEM }] },
+    contents: [{
+      role: "user",
+      parts: [{ text:
+`Analyse this profile. The chain[] array must list 2-4 evidence steps; the final step must start with "→" and state the predator's conclusion. summary is one sentence, <=140 chars. explain is 2-4 sentences in second person.
+
+PROFILE:
+${JSON.stringify(profile, null, 2)}` }]
+    }],
+    generationConfig: {
+      responseMimeType: "application/json",
+      responseSchema: GEMINI_SCHEMA,
+      temperature: 0.6
+    }
+  };
+  const res = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body)
+  });
+  if (!res.ok) {
+    const txt = await res.text().catch(()=>"");
+    throw new Error(`Gemini ${res.status}: ${txt.slice(0,200)}`);
+  }
+  const j = await res.json();
+  const text = j?.candidates?.[0]?.content?.parts?.[0]?.text;
+  if (!text) throw new Error("Empty response from Gemini");
+  const parsed = JSON.parse(text);
+  const list = Array.isArray(parsed.inferences) ? parsed.inferences : [];
+  return list
+    .filter(i => i && i.title && i.explain && Array.isArray(i.chain))
+    .map(i => ({ ...i, severity: Math.max(1, Math.min(25, parseInt(i.severity,10) || 5)) }))
+    .sort((a,b) => b.severity - a.severity)
+    .slice(0, 8);
+}
+
+/* ------------------------------------------------------------------ */
+/* Scripted inference engine (fallback / offline)                      */
+/* ------------------------------------------------------------------ */
+function runInference(profile) {
+  const p = { ...profile, postsJoined: (profile.posts || "").toLowerCase() };
+  const built = [];
+  const seen = new Set();
+  for (const r of RULES) {
+    try {
+      if (!r.test(p)) continue;
+      if (seen.has(r.id)) continue;
+      seen.add(r.id);
+      const detail = r.build(p);
+      built.push({ id: r.id, severity: r.severity, category: r.category, ...detail });
+    } catch (_) { /* skip broken rule */ }
+  }
+  return built.sort((a, b) => b.severity - a.severity).slice(0, 8);
+}
+
+/* Generate a personalised attacker narrative for the Reveal screen. */
+function buildNarrative(p, inferences) {
+  const has = id => inferences.some(i => i.id === id);
+  const lines = [];
+  const handle = p.username || "your handle";
+  lines.push(`Picture an attacker who has only ever seen ${q(handle)}. Here's what they figure out from your profile in the first 15 minutes:`);
+
+  const facts = [];
+  if (p.school) facts.push(`you attend ${p.school}`);
+  if (p.sport)  facts.push(`you're on the ${p.sport.toLowerCase()}`);
+  if (p.neighbourhood) facts.push(`you live around ${p.neighbourhood}`);
+  if (has("username_birthyear")) {
+    const y = birthYearFrom(p.username);
+    facts.push(`your real age is roughly ${y ? 2026 - y : "13–16"}`);
+  }
+  if (facts.length) lines.push("They know that " + facts.join(", ") + ".");
+
+  if (has("walking_home_alone")) {
+    const snip = extractSnippet(p.posts, WALK_PATTERNS);
+    lines.push(`Your own post — "${snip}" — confirms you walk home alone. Cross-referenced with practice days, they pick a specific corner${p.neighbourhood ? ` in ${p.neighbourhood}` : ""} and a specific window (roughly 5–6 pm on training days) to be there first.`);
+  }
+  if (has("school_real_name_guess")) {
+    lines.push(`A 5-minute Google of ${q(p.username)} alongside "${p.school}" surfaces tagged team photos and yearbook entries. Within minutes they have your real first and last name.`);
+  }
+  if (has("hangout_meet_in_person")) {
+    lines.push(`Knowing you regularly go to ${p.hangout}, they show up there a few times — not to talk, just to be a familiar face. By the third sighting, you nod hello. The first DM no longer feels cold.`);
+  }
+  if (has("pet_sibling_password")) {
+    lines.push(`In parallel, they try ${q(p.pet)} and ${q(p.sibling)} as answers on your email or Instagram's "forgot password" recovery questions. Those are the two most common security-question answers on the internet, and you handed both to them.`);
+  }
+  if (has("emotional_hook")) {
+    const snip = extractSnippet(p.posts, EMO_PATTERNS);
+    lines.push(`When they finally message you, the opener isn't "hi". It's something like: "saw your post — 'I've been there too, you can talk to me.'" The line lands because the words came from your own timeline ("${snip}").`);
+  }
+  lines.push(`None of this needed hacking. They just read what you posted and joined the dots.`);
+  return lines;
+}
+
+/* ------------------------------------------------------------------ */
+/* UI                                                                  */
+/* ------------------------------------------------------------------ */
+function App() {
+  const [screen, setScreen] = useState("landing"); // landing|form|analysing|web|reveal
+  const [profile, setProfile] = useState(null);
+  const [inferences, setInferences] = useState([]);
+  const [source, setSource] = useState("scripted"); // scripted | loading | ai
+  const [aiError, setAiError] = useState(null);
+
+  async function startFromProfile(prof) {
+    const scripted = runInference(prof);
+    setProfile(prof);
+    setInferences(scripted);
+    setAiError(null);
+    setScreen("analysing");
+
+    const key = getApiKey();
+    if (!key) { setSource("scripted"); return; }
+
+    setSource("loading");
+    try {
+      const ai = await runInferenceGemini(prof, key);
+      if (ai.length) { setInferences(ai); setSource("ai"); }
+      else { setSource("scripted"); setAiError("Gemini returned no inferences — using scripted fallback."); }
+    } catch (e) {
+      console.error(e);
+      setSource("scripted");
+      setAiError(e.message || "Gemini call failed — using scripted fallback.");
+    }
+  }
+
+  return (
+    <div className="min-h-full">
+      <TopBar onReset={() => setScreen("landing")} source={source} />
+      {screen === "landing"   && <Landing onStart={() => setScreen("form")} />}
+      {screen === "form"      && <ProfileForm onSubmit={startFromProfile} />}
+      {screen === "analysing" && <Analysing profile={profile} inferences={inferences} source={source} onDone={() => setScreen("web")} />}
+      {screen === "web"       && <InferenceWeb profile={profile} inferences={inferences} source={source} aiError={aiError} onReveal={() => setScreen("reveal")} />}
+      {screen === "reveal"    && <Reveal profile={profile} inferences={inferences} source={source} onRestart={() => setScreen("landing")} />}
+      <Footer />
+    </div>
+  );
+}
+
+function TopBar({ onReset, source }) {
+  const badge = source === "ai"
+    ? { text: "gemini · live", cls: "border-emerald-400/40 text-emerald-300 bg-emerald-500/10" }
+    : source === "loading"
+    ? { text: "gemini · querying…", cls: "border-amber-400/40 text-amber-300 bg-amber-500/10" }
+    : { text: "scripted rules", cls: "border-white/10 text-zinc-400" };
+  return (
+    <header className="border-b border-white/5 px-6 py-3 flex items-center justify-between sticky top-0 backdrop-blur bg-[#07080d]/70 z-10">
+      <button onClick={onReset} className="flex items-center gap-2 group">
+        <div className="w-7 h-7 rounded-md bg-red-500/10 border border-red-500/40 flex items-center justify-center group-hover:bg-red-500/20 transition">
+          <span className="text-red-400 text-sm">◉</span>
+        </div>
+        <span className="text-sm tracking-wider mono text-zinc-300 group-hover:text-white">FOOTPRINT/EXPOSE</span>
+      </button>
+      <div className="flex items-center gap-3">
+        <span className={`mono text-[10px] px-2 py-1 rounded border ${badge.cls}`}>{badge.text}</span>
+        <div className="mono text-[11px] text-zinc-500 hidden sm:block">
+          client-side only · key stored locally
+        </div>
+      </div>
+    </header>
+  );
+}
+
+function Footer() {
+  return (
+    <footer className="text-center text-[11px] mono text-zinc-600 py-6">
+      Educational demo. All inferences are scripted. No real lookups.
+    </footer>
+  );
+}
+
+/* ------- Landing ------- */
+function Landing({ onStart }) {
+  return (
+    <section className="relative">
+      <div className="absolute inset-0 scan-line opacity-40 pointer-events-none" />
+      <div className="max-w-3xl mx-auto px-6 pt-24 pb-16 text-center">
+        <div className="eyebrow text-[10px] text-red-400 mb-8">Content warning · ages 13+</div>
+        <h1 className="text-6xl sm:text-7xl leading-[0.95] tracking-tight">
+          <span className="font-medium">They only need</span><br/>
+          <span className="display text-red-400 text-7xl sm:text-8xl">a few clues.</span>
+        </h1>
+        <p className="text-zinc-400 mt-8 text-lg max-w-xl mx-auto leading-relaxed">
+          Build a fake teen profile with the kind of details people post every day.
+          Watch what a predator can piece together — name, location, schedule, when you're alone.
+        </p>
+        <div className="mt-10 flex justify-center gap-3">
+          <button onClick={onStart}
+            className="px-6 py-3 rounded-md bg-red-500 hover:bg-red-400 text-black font-semibold transition glow-red">
+            Build a profile →
+          </button>
+        </div>
+        <div className="mt-12 mono text-[11px] text-zinc-500 max-w-md mx-auto leading-relaxed">
+          This simulator never sends your input anywhere. That's part of the point —
+          a real attacker would, and you'd never know.
+        </div>
+      </div>
+    </section>
+  );
+}
+
+/* ------- Profile form ------- */
+function ProfileForm({ onSubmit }) {
+  const [p, setP] = useState({
+    username:"", age:"", school:"", sport:"", neighbourhood:"",
+    posts:"", pet:"", sibling:"", hangout:""
+  });
+  const [apiKey, setApiKeyState] = useState(getApiKey());
+  const [showKey, setShowKey] = useState(false);
+  const set = (k) => (e) => setP(prev => ({ ...prev, [k]: e.target.value }));
+  const minFilled = [p.username, p.school, p.sport, p.posts].filter(Boolean).length >= 2;
+
+  function loadSample(i) { setP(SAMPLE_PROFILES[i].data); }
+  function saveKey(v) { setApiKeyState(v); setApiKey(v.trim()); }
+
+  return (
+    <section className="max-w-3xl mx-auto px-6 py-12">
+      <div className="flex items-baseline justify-between mb-2">
+        <h2 className="text-3xl"><span className="font-medium">Build a</span> <span className="display text-red-300">fake profile</span></h2>
+        <span className="eyebrow text-[10px] text-zinc-500">step 1 / 3</span>
+      </div>
+      <p className="text-zinc-400 text-sm mb-6">
+        Use made-up details — or click a sample profile below.
+        <span className="text-red-400"> Do not enter anything real about yourself.</span>
+      </p>
+
+      <div className="flex gap-2 mb-8 flex-wrap">
+        {SAMPLE_PROFILES.map((s,i) => (
+          <button key={s.name} onClick={()=>loadSample(i)}
+            className="text-xs mono px-3 py-1.5 rounded border border-white/10 hover:border-red-400/60 hover:text-red-300 text-zinc-400 transition">
+            load · {s.name}
+          </button>
+        ))}
+      </div>
+
+      <div className="grid sm:grid-cols-2 gap-4">
+        <Field label="Username / handle" value={p.username} onChange={set("username")} placeholder="alex_runs_2010" />
+        <Field label="Age" value={p.age} onChange={set("age")} placeholder="14" />
+        <Field label="School name" value={p.school} onChange={set("school")} placeholder="Riverside High" />
+        <Field label="Sports team / club" value={p.sport} onChange={set("sport")} placeholder="Cross-country" />
+        <Field label="Neighbourhood / area mentions" value={p.neighbourhood} onChange={set("neighbourhood")} placeholder="Maple Park" />
+        <Field label="Favourite hangout (optional)" value={p.hangout} onChange={set("hangout")} placeholder="Bean Café" />
+        <Field label="Pet name (optional)" value={p.pet} onChange={set("pet")} placeholder="Biscuit" />
+        <Field label="Sibling name (optional)" value={p.sibling} onChange={set("sibling")} placeholder="Jamie" />
+      </div>
+
+      <label className="block mt-4">
+        <span className="eyebrow text-[10px] text-zinc-400">Recent post snippets (up to 3, one per line)</span>
+        <textarea value={p.posts} onChange={set("posts")} rows={4}
+          placeholder={"Walking home from practice in the rain 😩\nHad a huge fight with mum, I hate it here\nAt Bean Café with the team after the meet"}
+          className="mt-1 w-full bg-white/[0.03] border border-white/10 focus:border-red-400/60 focus:outline-none rounded-md px-3 py-2 text-sm" />
+      </label>
+
+      <div className="mt-8 rounded-md border border-white/10 bg-white/[0.02] p-4">
+        <div className="flex items-baseline justify-between mb-2">
+          <span className="eyebrow text-[10px] text-zinc-400">Gemini API key (optional)</span>
+          <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener noreferrer"
+             className="mono text-[10px] text-zinc-500 hover:text-red-300">get a free key ↗</a>
+        </div>
+        <div className="flex gap-2">
+          <input
+            type={showKey ? "text" : "password"}
+            value={apiKey}
+            onChange={(e)=>saveKey(e.target.value)}
+            placeholder="paste key to use live Gemini analysis · leave blank for scripted rules"
+            className="flex-1 bg-black/40 border border-white/10 focus:border-red-400/60 focus:outline-none rounded-md px-3 py-2 mono text-xs" />
+          <button type="button" onClick={()=>setShowKey(s=>!s)}
+            className="mono text-[10px] px-2 rounded border border-white/10 text-zinc-400 hover:text-zinc-200">
+            {showKey ? "hide" : "show"}
+          </button>
+          <button type="button" disabled={!apiKey} onClick={()=>{ saveKey(""); setShowKey(false); }}
+            className="mono text-[10px] px-2 rounded border border-white/10 text-zinc-400 hover:text-red-300 disabled:opacity-30 disabled:hover:text-zinc-400">
+            clear
+          </button>
+        </div>
+        <p className="mono text-[10px] text-zinc-500 mt-2 leading-relaxed">
+          Key is held only in this tab's sessionStorage and cleared when you close it; it is sent directly to Google's API with no server in between. Don't enter your key on a shared or public computer.
+        </p>
+      </div>
+
+      <div className="mt-6 flex items-center justify-between">
+        <span className="mono text-[11px] text-zinc-500">
+          {minFilled
+            ? (apiKey ? "ready · will query Gemini" : "ready · will use scripted rules")
+            : "fill at least 2 fields to continue"}
+        </span>
+        <button disabled={!minFilled} onClick={()=>onSubmit(p)}
+          className={`px-5 py-2.5 rounded-md font-semibold transition
+            ${minFilled ? "bg-red-500 hover:bg-red-400 text-black glow-red" : "bg-zinc-800 text-zinc-500 cursor-not-allowed"}`}>
+          Analyse →
+        </button>
+      </div>
+    </section>
+  );
+}
+
+function Field({ label, ...rest }) {
+  return (
+    <label className="block">
+      <span className="eyebrow text-[10px] text-zinc-400">{label}</span>
+      <input {...rest}
+        className="mt-1 w-full bg-white/[0.03] border border-white/10 focus:border-red-400/60 focus:outline-none rounded-md px-3 py-2 text-sm" />
+    </label>
+  );
+}
+
+/* ------- Analysing ------- */
+function Analysing({ profile, inferences, source, onDone }) {
+  const [lines, setLines] = useState([]);
+  const [animDone, setAnimDone] = useState(false);
+  const allLines = useMemo(() => buildLog(profile, inferences, source), [profile, inferences, source]);
+
+  useEffect(() => {
+    setLines([]); setAnimDone(false);
+    let i = 0;
+    const id = setInterval(() => {
+      i++;
+      setLines(allLines.slice(0, i));
+      if (i >= allLines.length) {
+        clearInterval(id);
+        setAnimDone(true);
+      }
+    }, 200);
+    return () => clearInterval(id);
+  }, [allLines]);
+
+  useEffect(() => {
+    if (animDone && source !== "loading") {
+      const t = setTimeout(onDone, 500);
+      return () => clearTimeout(t);
+    }
+  }, [animDone, source, onDone]);
+
+  return (
+    <section className="max-w-3xl mx-auto px-6 py-16">
+      <div className="eyebrow text-[10px] text-red-400 mb-3 flex items-center gap-2">
+        <span className="inline-block w-2 h-2 rounded-full bg-red-500 pulse-dot" />
+        {source === "loading" ? "querying gemini…" : source === "ai" ? "gemini complete" : "analysing public traces"}
+      </div>
+      <h2 className="display text-4xl text-zinc-100 mb-6">listening…</h2>
+      <div className="rounded-md border border-white/10 bg-black/60 p-5 h-72 overflow-y-auto log mono text-[13px] leading-6">
+        {lines.map((l, idx) => (
+          <div key={idx} className={l.kind === "alert" ? "text-red-300" : l.kind === "ok" ? "text-emerald-300" : "text-zinc-400"}>
+            <span className="text-zinc-600 mr-2">{String(idx+1).padStart(2,"0")}</span>{l.text}
+          </div>
+        ))}
+        <div className="text-zinc-500 typing"></div>
+      </div>
+    </section>
+  );
+}
+
+function buildLog(profile, inferences, source) {
+  const log = [
+    { text: "scan started · target = public profile fragments", kind:"ok" },
+    profile.username && { text: `handle observed → "${profile.username}"`, kind:"ok" },
+    profile.school   && { text: `affiliation observed → "${profile.school}"`, kind:"ok" },
+    profile.sport    && { text: `interest observed → "${profile.sport}"`, kind:"ok" },
+    profile.neighbourhood && { text: `geo hint → "${profile.neighbourhood}"`, kind:"ok" },
+    profile.posts && { text: `text corpus loaded · ${profile.posts.split("\n").filter(Boolean).length} post(s)`, kind:"ok" },
+    source === "loading"
+      ? { text: `dispatching profile to gemini-2.5-flash for analysis…`, kind:"ok" }
+      : { text: "cross-referencing patterns…", kind:"ok" },
+  ].filter(Boolean);
+  inferences.forEach(inf => {
+    log.push({ text: `inference ↦ ${inf.title}  [severity ${inf.severity}]`, kind:"alert" });
+  });
+  if (source === "ai") log.push({ text: "gemini analysis complete · compiling exposure map…", kind:"ok" });
+  else log.push({ text: "compiling exposure map…", kind:"ok" });
+  return log;
+}
+
+/* ------- Inference Web (radial graph) ------- */
+function InferenceWeb({ profile, inferences, source, aiError, onReveal }) {
+  const [visible, setVisible] = useState(0);
+  const [open, setOpen] = useState(null);
+  const total = inferences.length;
+
+  useEffect(() => {
+    if (visible >= total) return;
+    const id = setTimeout(() => setVisible(v => v + 1), 550);
+    return () => clearTimeout(id);
+  }, [visible, total]);
+
+  const score = useMemo(() =>
+    Math.min(100, inferences.slice(0, visible).reduce((s,i) => s + i.severity, 0)),
+    [inferences, visible]);
+
+  const allDone = visible >= total;
+
+  /* Radial layout */
+  const W = 720, H = 520, CX = W/2, CY = H/2;
+  const radius = 200;
+  const positions = inferences.map((_, i) => {
+    const angle = (Math.PI * 2 * i) / Math.max(total,1) - Math.PI/2;
+    return { x: CX + Math.cos(angle) * radius, y: CY + Math.sin(angle) * radius };
+  });
+
+  return (
+    <section className="max-w-6xl mx-auto px-6 py-10">
+      <div className="flex items-baseline justify-between mb-3">
+        <h2 className="text-3xl"><span className="font-medium">What they can</span> <span className="display text-red-300">piece together</span></h2>
+        <span className="eyebrow text-[10px] text-zinc-500">step 2 / 3</span>
+      </div>
+      <p className="text-zinc-400 text-sm mb-3">Click a node to see <em>how</em> the inference was made.</p>
+      {source === "ai" && (
+        <div className="mono text-[11px] text-emerald-300/80 mb-4">▸ inferences generated live by gemini-2.5-flash</div>
+      )}
+      {aiError && (
+        <div className="mono text-[11px] text-amber-300/80 mb-4">▸ {aiError}</div>
+      )}
+
+      <div className="grid lg:grid-cols-[1fr_320px] gap-8 items-start">
+        <div className="rounded-xl border border-white/10 bg-gradient-to-b from-white/[0.02] to-transparent overflow-hidden">
+          <svg viewBox={`0 0 ${W} ${H}`} className="w-full h-auto">
+            {/* edges */}
+            {inferences.slice(0, visible).map((inf, i) => {
+              const pos = positions[i];
+              return (
+                <line key={"e"+inf.id}
+                  x1={CX} y1={CY} x2={pos.x} y2={pos.y}
+                  stroke={severityColor(inf.severity, 0.6)} strokeWidth="1.5"
+                  className="line-draw" />
+              );
+            })}
+            {/* center node */}
+            <g>
+              <circle cx={CX} cy={CY} r="42" fill="#1a1d28" stroke="#ef4444" strokeWidth="2" />
+              <text x={CX} y={CY-2} textAnchor="middle" fill="#fca5a5"
+                    style={{font:'500 11px "JetBrains Mono", ui-monospace, Menlo, monospace'}}>
+                {(profile.username || "profile").slice(0, 14)}
+              </text>
+              <text x={CX} y={CY+12} textAnchor="middle" fill="#71717a"
+                    style={{font:'10px "JetBrains Mono", ui-monospace, Menlo, monospace'}}>
+                target
+              </text>
+            </g>
+            {/* inference nodes */}
+            {inferences.slice(0, visible).map((inf, i) => {
+              const pos = positions[i];
+              return (
+                <g key={inf.id} className="node-pop cursor-pointer"
+                   onClick={() => setOpen(inf)}>
+                  <circle cx={pos.x} cy={pos.y} r="9" fill={severityColor(inf.severity, 1)} />
+                  <circle cx={pos.x} cy={pos.y} r="14" fill="none" stroke={severityColor(inf.severity, 0.4)} />
+                  <foreignObject x={pos.x - 90} y={pos.y + 16} width="180" height="60">
+                    <div xmlns="http://www.w3.org/1999/xhtml"
+                         className="text-center text-[11px] leading-tight text-zinc-200 px-2 py-1 rounded bg-black/60 border border-white/10">
+                      {inf.title}
+                    </div>
+                  </foreignObject>
+                </g>
+              );
+            })}
+          </svg>
+        </div>
+
+        <aside className="space-y-4">
+          <SeverityMeter score={score} live={!allDone} />
+          {open ? (
+            <DetailCard inf={open} onClose={()=>setOpen(null)} />
+          ) : (
+            <div className="rounded-lg border border-white/10 p-4 text-sm text-zinc-400">
+              {allDone
+                ? "All inferences mapped. Click any node to inspect, or continue."
+                : <>Building exposure web… <span className="mono text-zinc-500">{visible}/{total}</span></>}
+            </div>
+          )}
+          <button disabled={!allDone} onClick={onReveal}
+            className={`w-full px-5 py-3 rounded-md font-semibold transition
+              ${allDone ? "bg-red-500 hover:bg-red-400 text-black glow-red" : "bg-zinc-800 text-zinc-500 cursor-not-allowed"}`}>
+            See what to change →
+          </button>
+        </aside>
+      </div>
+    </section>
+  );
+}
+
+function severityColor(s, alpha=1) {
+  // 0..22 → green→amber→red
+  const t = Math.min(1, s / 22);
+  const r = Math.round(80 + (239 - 80) * t);
+  const g = Math.round(200 - (200 - 60) * t);
+  const b = Math.round(120 - (120 - 60) * t);
+  return `rgba(${r},${g},${b},${alpha})`;
+}
+
+function DetailCard({ inf, onClose }) {
+  return (
+    <div className="rounded-lg border border-red-500/40 bg-red-500/[0.06] p-4 text-sm">
+      <div className="flex items-start justify-between gap-3">
+        <div className="eyebrow text-[10px] text-red-300">{inf.category}</div>
+        <button onClick={onClose} className="text-zinc-500 hover:text-zinc-200 text-xs">close ✕</button>
+      </div>
+      <div className="display text-2xl mt-1 text-zinc-100 leading-tight">{inf.title}</div>
+      {inf.summary && (
+        <p className="text-zinc-300 mt-2 text-sm leading-relaxed">{inf.summary}</p>
+      )}
+
+      {inf.chain && inf.chain.length > 0 && (
+        <div className="mt-3 rounded border border-white/10 bg-black/40 p-3">
+          <div className="eyebrow text-[9px] text-zinc-500 mb-1.5">evidence chain</div>
+          <div className="mono text-[11px] text-zinc-300 leading-relaxed space-y-0.5">
+            {inf.chain.map((c, i) => (
+              <div key={i} className={c.startsWith("→") ? "text-red-300 pl-0" : "pl-0"}>{c}</div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      <div className="mt-3 mono text-[11px] text-zinc-500">severity contribution · +{inf.severity} · full reasoning in step 3</div>
+    </div>
+  );
+}
+
+function SeverityMeter({ score, live }) {
+  const band = score < 25 ? "low" : score < 55 ? "elevated" : score < 80 ? "high" : "critical";
+  const color = score < 25 ? "bg-emerald-500" : score < 55 ? "bg-amber-400" : score < 80 ? "bg-orange-500" : "bg-red-500";
+  return (
+    <div className="rounded-lg border border-white/10 p-4">
+      <div className="flex items-baseline justify-between">
+        <span className="eyebrow text-[10px] text-zinc-400">Exposure score</span>
+        <span className="mono text-[11px] text-zinc-500">{band}{live && " · live"}</span>
+      </div>
+      <div className="display text-6xl mt-1 text-zinc-100 leading-none">{score}<span className="text-zinc-600 text-2xl mono not-italic ml-1">/100</span></div>
+      <div className="mt-3 h-2 w-full rounded-full bg-white/5 overflow-hidden">
+        <div className={`h-full ${color} transition-all duration-500`} style={{width:`${score}%`}} />
+      </div>
+    </div>
+  );
+}
+function CaptionAnalyzer() {
+  const [caption, setCaption] = useState('');
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [result, setResult] = useState(null);
+
+  const handleAnalyze = async () => {
+    if (!caption) return;
+    setIsAnalyzing(true);
+    setResult(null);
+
+    const apiKey = getApiKey(); // Grabs the key the user entered on the first page!
+    
+    if (!apiKey) {
+      setResult({
+        attackerView: "API Key Missing",
+        safeAlternative: "Please enter your free Gemini API Key on the first page.",
+        explanation: "The Caption Rewriter needs an API key to analyze custom text."
+      });
+      setIsAnalyzing(false);
+      return;
+    }
+
+    const systemPrompt = `You are a cybersecurity privacy expert acting as a safe-posting filter for teenagers. 
+    Rewrite the user's social media caption to be completely safe from online predators while keeping the original teenage tone, slang, and emojis.
+    Strip real-time locations, exact routines, and identifiable nouns. Neutralize emotional vulnerability.
+    
+    You MUST respond strictly in JSON format with exactly three keys:
+    1. "attackerView": A single sentence explaining what a predator infers from the original post.
+    2. "safeAlternative": The rewritten, predator-proof caption.
+    3. "explanation": A short explanation of why the original red flags were dangerous.`;
+
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${encodeURIComponent(apiKey)}`;
+    
+    try {
+      const response = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          systemInstruction: { parts: [{ text: systemPrompt }] },
+          contents: [{ role: "user", parts: [{ text: caption }] }],
+          generationConfig: {
+            responseMimeType: "application/json"
+          }
+        })
+      });
+
+      if (!response.ok) throw new Error("Gemini API Error");
+
+      const data = await response.json();
+      const textResponse = data.candidates?.[0]?.content?.parts?.[0]?.text;
+      
+      if (!textResponse) throw new Error("Empty response");
+
+      const aiResult = JSON.parse(textResponse);
+      
+      setResult({
+        attackerView: aiResult.attackerView,
+        safeAlternative: aiResult.safeAlternative,
+        explanation: aiResult.explanation
+      });
+
+    } catch (error) {
+      console.error(error);
+      setResult({
+        attackerView: "Analysis Failed",
+        safeAlternative: "Could not connect to AI.",
+        explanation: "There was an error communicating with Gemini. Please check your API key."
+      });
+    }
+    
+    setIsAnalyzing(false);
+  };
+
+  return (
+    <div className="rounded-lg border border-indigo-500/30 bg-indigo-500/[0.05] p-5 mt-8">
+      <div className="eyebrow text-[10px] text-indigo-300 mb-2">Caption Rewriter Tool</div>
+      <p className="text-zinc-300 text-sm mb-4">Paste your own caption below to see how the AI rewrites it safely.</p>
+      
+      <textarea 
+        className="w-full bg-black/40 border border-white/10 focus:border-indigo-400/60 focus:outline-none rounded-md px-3 py-2 text-sm text-zinc-200 mb-3"
+        rows="2"
+        placeholder="e.g., Walking home from practice in the rain again 😩"
+        value={caption}
+        onChange={(e) => setCaption(e.target.value)}
+      ></textarea>
+
+      <button 
+        onClick={handleAnalyze}
+        disabled={isAnalyzing}
+        className="px-5 py-2 rounded-md bg-indigo-500/20 hover:bg-indigo-500/30 border border-indigo-500/50 text-indigo-200 text-sm font-medium transition disabled:opacity-50"
+      >
+        {isAnalyzing ? "Rewriting..." : "Test Caption →"}
+      </button>
+
+      {result && (
+        <div className="mt-5 space-y-4 animate-fade-in border-t border-white/10 pt-4">
+          <div>
+            <span className="eyebrow text-[10px] text-red-400">⚠️ What an attacker infers</span>
+            <p className="text-sm text-red-200/80 mt-1">{result.attackerView}</p>
+          </div>
+          <div>
+            <span className="eyebrow text-[10px] text-emerald-400">✅ Safe Alternative</span>
+            <p className="text-base text-zinc-100 mt-1">"{result.safeAlternative}"</p>
+            <p className="text-sm text-emerald-200/80 mt-1"><strong className="text-emerald-400">Why:</strong> {result.explanation}</p>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+/* ------- Reveal ------- */
+function Reveal({ profile, inferences, onRestart }) {
+  const total = inferences.reduce((s,i) => s + i.severity, 0);
+  const score = Math.min(100, total);
+
+  /* Map back from each filled field → safer suggestion */
+  const fieldKeys = [
+    ["username", profile.username],
+    ["age", profile.age],
+    ["school", profile.school],
+    ["sport", profile.sport],
+    ["neighbourhood", profile.neighbourhood],
+    ["pet", profile.pet],
+    ["sibling", profile.sibling],
+    ["hangout", profile.hangout],
+    ["posts", profile.posts],
+  ].filter(([_,v]) => v && String(v).trim());
+
+  return (
+    <section className="max-w-3xl mx-auto px-6 py-12">
+      <div className="flex items-baseline justify-between mb-2">
+        <h2 className="text-3xl leading-tight"><span className="font-medium">Here's what they</span> <span className="display text-red-300">could do with this.</span></h2>
+        <span className="eyebrow text-[10px] text-zinc-500">step 3 / 3</span>
+      </div>
+      <p className="text-zinc-400 text-sm mb-8">
+        From the {fieldKeys.length} thing{fieldKeys.length === 1 ? "" : "s"} you shared,
+        an attacker assembled <strong className="text-red-300">{inferences.length} usable inferences</strong> with
+        an exposure score of <strong className="text-red-300">{score}/100</strong>.
+      </p>
+
+      <div className="rounded-lg border border-red-500/30 bg-red-500/[0.05] p-5 mb-8">
+        <div className="eyebrow text-[10px] text-red-300 mb-3">15 minutes in the attacker's head</div>
+        <div className="space-y-3 text-[15px] text-zinc-200 leading-relaxed">
+          {buildNarrative(profile, inferences).map((para, i) => (
+            <p key={i} className={i === 0 ? "display text-xl text-zinc-100 leading-snug" : ""}>{para}</p>
+          ))}
+        </div>
+      </div>
+
+      <div className="eyebrow text-[10px] text-red-300 mb-3">Each inference, with the evidence</div>
+      <div className="space-y-3 mb-8">
+        {inferences.map(inf => (
+          <div key={inf.id} className="rounded-md border border-white/10 p-4">
+            <div className="flex items-baseline justify-between gap-3">
+              <div className="text-[15px] font-medium text-zinc-100 leading-snug tracking-tight">{inf.title}</div>
+              <span className="mono text-[11px] text-red-300 whitespace-nowrap">+{inf.severity}</span>
+            </div>
+            {inf.chain && inf.chain.length > 0 && (
+              <div className="mt-2 mono text-[11px] text-zinc-400 leading-relaxed">
+                {inf.chain.map((c,i) => (
+                  <span key={i} className={c.startsWith("→") ? "text-red-300" : ""}>
+                    {i > 0 && !c.startsWith("→") ? "  " : ""}{c}{i < inf.chain.length - 1 ? "   " : ""}
+                  </span>
+                ))}
+              </div>
+            )}
+            <p className="text-sm text-zinc-300 mt-2 leading-relaxed">{inf.explain}</p>
+          </div>
+        ))}
+      </div>
+
+      <div className="eyebrow text-[10px] text-emerald-300 mb-3">Safer alternatives, per field</div>
+      <div className="space-y-3">
+        {fieldKeys.map(([k,v]) => (
+          <div key={k} className="rounded-md border border-white/10 p-4">
+            <div className="flex items-baseline justify-between">
+              <span className="eyebrow text-[10px] text-zinc-400">{k}</span>
+              <span className="mono text-[11px] text-zinc-600 truncate max-w-[60%]">{String(v).split("\n")[0].slice(0,60)}</span>
+            </div>
+            <p className="text-sm text-zinc-200 mt-2">{SAFER[k] || "Keep this kind of detail off public profiles."}</p>
+          </div>
+        ))}
+      </div>
+
+      {/* 🟢 YOUR CAPTION ANALYZER TOOL IS ADDED RIGHT HERE! 🟢 */}
+      <CaptionAnalyzer />
+
+      <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/[0.05] p-5 mt-8">
+        <div className="eyebrow text-[10px] text-emerald-300 mb-2">The one thing to remember</div>
+        <p className="text-zinc-200 text-sm leading-relaxed">
+          A predator doesn't need to <em>hack</em> you. They piece you together from things you posted because they felt harmless.
+          Every detail you remove shrinks the picture.
+        </p>
+      </div>
+
+      <div className="mt-8 flex flex-wrap gap-3 justify-between items-center">
+        <button onClick={onRestart}
+          className="px-5 py-2.5 rounded-md bg-white/5 hover:bg-white/10 border border-white/10 text-zinc-200">
+          ← Try another profile
+        </button>
+        <button onClick={() => window.print()}
+          className="px-5 py-2.5 rounded-md bg-emerald-500 hover:bg-emerald-400 text-black font-semibold">
+          Print summary
+        </button>
+      </div>
+    </section>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+</script>
+</body>
+</html>
