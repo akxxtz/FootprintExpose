@@ -165,10 +165,11 @@ test("runAnalysis throws a 500-style error when apiKey missing", async () => {
   );
 });
 
-test("runAnalysis calls fetch with the key and returns normalized result", async () => {
-  let calledUrl = "";
-  const fetchImpl = async (url) => {
+test("runAnalysis sends the key via header, not the URL, and returns normalized result", async () => {
+  let sentKey = "", calledUrl = "";
+  const fetchImpl = async (url, opts) => {
     calledUrl = url;
+    sentKey = opts.headers["x-goog-api-key"];
     return {
       ok: true,
       json: async () => ({ candidates: [{ content: { parts: [{ text: JSON.stringify({
@@ -177,7 +178,8 @@ test("runAnalysis calls fetch with the key and returns normalized result", async
     };
   };
   const out = await runAnalysis({ mode: "text", profile: { username: "x" } }, { apiKey: "SECRET", fetchImpl });
-  assert.ok(calledUrl.includes("SECRET"));
+  assert.equal(sentKey, "SECRET");
+  assert.ok(!calledUrl.includes("SECRET")); // key must NOT be in the URL
   assert.equal(out.inferences.length, 1);
 });
 

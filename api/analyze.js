@@ -105,15 +105,16 @@ export async function runAnalysis(input, { apiKey, fetchImpl = fetch } = {}) {
     err.status = 500;
     throw err;
   }
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${encodeURIComponent(apiKey)}`;
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`;
   const res = await fetchImpl(url, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", "x-goog-api-key": apiKey },
     body: JSON.stringify(buildGeminiBody(input))
   });
   if (!res.ok) {
     const txt = await res.text().catch(() => "");
-    const err = new Error(`Gemini ${res.status}: ${txt.slice(0, 200)}`);
+    console.error(`Gemini ${res.status}: ${txt.slice(0, 500)}`);
+    const err = new Error("Upstream analysis service error.");
     err.status = 502;
     throw err;
   }
