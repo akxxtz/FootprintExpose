@@ -804,7 +804,116 @@ function SeverityMeter({ score, live }) {
     </div>
   );
 }
+function CaptionAnalyzer() {
+  const [caption, setCaption] = useState('');
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [result, setResult] = useState(null);
 
+  const handleAnalyze = async () => {
+    if (!caption) return;
+    setIsAnalyzing(true);
+    setResult(null);
+
+    const apiKey = getApiKey(); // Grabs the key the user entered on the first page!
+    
+    if (!apiKey) {
+      setResult({
+        attackerView: "API Key Missing",
+        safeAlternative: "Please enter your free Gemini API Key on the first page.",
+        explanation: "The Caption Rewriter needs an API key to analyze custom text."
+      });
+      setIsAnalyzing(false);
+      return;
+    }
+
+    const systemPrompt = `You are a cybersecurity privacy expert acting as a safe-posting filter for teenagers. 
+    Rewrite the user's social media caption to be completely safe from online predators while keeping the original teenage tone, slang, and emojis.
+    Strip real-time locations, exact routines, and identifiable nouns. Neutralize emotional vulnerability.
+    
+    You MUST respond strictly in JSON format with exactly three keys:
+    1. "attackerView": A single sentence explaining what a predator infers from the original post.
+    2. "safeAlternative": The rewritten, predator-proof caption.
+    3. "explanation": A short explanation of why the original red flags were dangerous.`;
+
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${encodeURIComponent(apiKey)}`;
+    
+    try {
+      const response = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          systemInstruction: { parts: [{ text: systemPrompt }] },
+          contents: [{ role: "user", parts: [{ text: caption }] }],
+          generationConfig: {
+            responseMimeType: "application/json"
+          }
+        })
+      });
+
+      if (!response.ok) throw new Error("Gemini API Error");
+
+      const data = await response.json();
+      const textResponse = data.candidates?.[0]?.content?.parts?.[0]?.text;
+      
+      if (!textResponse) throw new Error("Empty response");
+
+      const aiResult = JSON.parse(textResponse);
+      
+      setResult({
+        attackerView: aiResult.attackerView,
+        safeAlternative: aiResult.safeAlternative,
+        explanation: aiResult.explanation
+      });
+
+    } catch (error) {
+      console.error(error);
+      setResult({
+        attackerView: "Analysis Failed",
+        safeAlternative: "Could not connect to AI.",
+        explanation: "There was an error communicating with Gemini. Please check your API key."
+      });
+    }
+    
+    setIsAnalyzing(false);
+  };
+
+  return (
+    <div className="rounded-lg border border-indigo-500/30 bg-indigo-500/[0.05] p-5 mt-8">
+      <div className="eyebrow text-[10px] text-indigo-300 mb-2">Caption Rewriter Tool</div>
+      <p className="text-zinc-300 text-sm mb-4">Paste your own caption below to see how the AI rewrites it safely.</p>
+      
+      <textarea 
+        className="w-full bg-black/40 border border-white/10 focus:border-indigo-400/60 focus:outline-none rounded-md px-3 py-2 text-sm text-zinc-200 mb-3"
+        rows="2"
+        placeholder="e.g., Walking home from practice in the rain again 😩"
+        value={caption}
+        onChange={(e) => setCaption(e.target.value)}
+      ></textarea>
+
+      <button 
+        onClick={handleAnalyze}
+        disabled={isAnalyzing}
+        className="px-5 py-2 rounded-md bg-indigo-500/20 hover:bg-indigo-500/30 border border-indigo-500/50 text-indigo-200 text-sm font-medium transition disabled:opacity-50"
+      >
+        {isAnalyzing ? "Rewriting..." : "Test Caption →"}
+      </button>
+
+      {result && (
+        <div className="mt-5 space-y-4 animate-fade-in border-t border-white/10 pt-4">
+          <div>
+            <span className="eyebrow text-[10px] text-red-400">⚠️ What an attacker infers</span>
+            <p className="text-sm text-red-200/80 mt-1">{result.attackerView}</p>
+          </div>
+          <div>
+            <span className="eyebrow text-[10px] text-emerald-400">✅ Safe Alternative</span>
+            <p className="text-base text-zinc-100 mt-1">"{result.safeAlternative}"</p>
+            <p className="text-sm text-emerald-200/80 mt-1"><strong className="text-emerald-400">Why:</strong> {result.explanation}</p>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
 /* ------- Reveal ------- */
 function Reveal({ profile, inferences, onRestart }) {
   const total = inferences.reduce((s,i) => s + i.severity, 0);
@@ -878,6 +987,9 @@ function Reveal({ profile, inferences, onRestart }) {
           </div>
         ))}
       </div>
+
+      {/* 🟢 YOUR CAPTION ANALYZER TOOL IS ADDED RIGHT HERE! 🟢 */}
+      <CaptionAnalyzer />
 
       <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/[0.05] p-5 mt-8">
         <div className="eyebrow text-[10px] text-emerald-300 mb-2">The one thing to remember</div>
