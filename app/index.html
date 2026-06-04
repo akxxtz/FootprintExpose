@@ -256,8 +256,9 @@ function compressImage(file) {
       canvas.getContext("2d").drawImage(img, 0, 0, w, h);
       const dataUrl = canvas.toDataURL("image/jpeg", 0.85);
       resolve(dataUrl.split(",")[1]); // strip "data:image/jpeg;base64,"
+      URL.revokeObjectURL(img.src);
     };
-    img.onerror = () => reject(new Error("Could not read image."));
+    img.onerror = () => { URL.revokeObjectURL(img.src); reject(new Error("Could not read image.")); };
     img.src = URL.createObjectURL(file);
   });
 }
@@ -504,7 +505,7 @@ function PhotoForm({ onSubmit }) {
         const b64 = await compressImage(f);
         added.push({ id: Math.random().toString(36).slice(2), preview: `data:image/jpeg;base64,${b64}`, b64 });
       }
-      setItems(prev => [...prev, ...added]);
+      setItems(prev => [...prev, ...added].slice(0, MAX_IMAGES));
     } catch (e) { setErr(e.message); }
     setBusy(false);
   }
@@ -535,7 +536,7 @@ function PhotoForm({ onSubmit }) {
           {items.map(it => (
             <div key={it.id} className="relative group">
               <img src={it.preview} className="w-full h-24 object-cover rounded border border-white/10" alt="upload" />
-              <button onClick={() => remove(it.id)}
+              <button onClick={() => remove(it.id)} aria-label="Remove image"
                 className="absolute top-1 right-1 w-5 h-5 rounded-full bg-black/70 text-white text-xs leading-none">×</button>
             </div>
           ))}
