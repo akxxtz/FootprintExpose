@@ -189,3 +189,38 @@ test("runAnalysis throws when Gemini returns non-OK", async () => {
     () => runAnalysis({ mode: "text", profile: { username: "x" } }, { apiKey: "K", fetchImpl })
   );
 });
+
+import handler from "../api/analyze.js";
+
+function mockRes() {
+  return {
+    statusCode: 0, body: null,
+    status(c) { this.statusCode = c; return this; },
+    json(o) { this.body = o; return this; }
+  };
+}
+
+test("handler rejects non-POST with 405", async () => {
+  const res = mockRes();
+  await handler({ method: "GET" }, res);
+  assert.equal(res.statusCode, 405);
+});
+
+test("handler returns 400 on invalid body", async () => {
+  const res = mockRes();
+  await handler({ method: "POST", body: { mode: "nope" } }, res);
+  assert.equal(res.statusCode, 400);
+});
+
+test("handler returns a generic 500 without leaking the env var name when key missing", async () => {
+  const prev = process.env.GEMINI_API_KEY;
+  delete process.env.GEMINI_API_KEY;
+  try {
+    const res = mockRes();
+    await handler({ method: "POST", body: { mode: "text", profile: { username: "x" } } }, res);
+    assert.equal(res.statusCode, 500);
+    assert.ok(!/GEMINI_API_KEY/.test(res.body.error)); // no leak
+  } finally {
+    if (prev !== undefined) process.env.GEMINI_API_KEY = prev;
+  }
+});

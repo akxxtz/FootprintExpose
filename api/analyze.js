@@ -134,7 +134,9 @@ export default async function handler(req, res) {
     return res.status(200).json({ source: "gemini", ...out });
   } catch (e) {
     const status = e.status || 502;
-    return res.status(status).json({ error: e.message || "Analysis failed." });
+    // Never echo server-side (5xx) detail to the client; only client-error (4xx) messages are safe.
+    const message = status >= 500 ? "Analysis failed. Please try again." : (e.message || "Analysis failed.");
+    return res.status(status).json({ error: message });
   }
 }
 
@@ -142,12 +144,12 @@ function safeParse(s) { try { return JSON.parse(s); } catch { return null; } }
 
 export function normalizeResult(geminiJson) {
   const text = geminiJson?.candidates?.[0]?.content?.parts?.[0]?.text;
-  if (!text) throw new Error("Empty response from Gemini.");
+  if (!text) { const e = new Error("Empty response from Gemini."); e.status = 502; throw e; }
   let parsed;
   try {
     parsed = JSON.parse(text);
   } catch {
-    throw new Error("Gemini returned non-JSON text.");
+    const e = new Error("Gemini returned non-JSON text."); e.status = 502; throw e;
   }
   const inferences = (Array.isArray(parsed.inferences) ? parsed.inferences : [])
     .filter(i => i && i.title && i.explain && Array.isArray(i.chain))
