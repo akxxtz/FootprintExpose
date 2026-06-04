@@ -303,7 +303,7 @@ function buildNarrative(p, inferences) {
     const snip = extractSnippet(p.posts, WALK_PATTERNS);
     lines.push(`Your own post — "${snip}" — confirms you walk home alone. Cross-referenced with practice days, they pick a specific corner${p.neighbourhood ? ` in ${p.neighbourhood}` : ""} and a specific window (roughly 5–6 pm on training days) to be there first.`);
   }
-  if (has("school_real_name_guess")) {
+  if (has("school_real_name_guess") && p.school) {
     lines.push(`A 5-minute Google of ${q(p.username)} alongside "${p.school}" surfaces tagged team photos and yearbook entries. Within minutes they have your real first and last name.`);
   }
   if (has("hangout_meet_in_person")) {
@@ -324,7 +324,7 @@ function buildNarrative(p, inferences) {
 /* UI                                                                  */
 /* ------------------------------------------------------------------ */
 function App() {
-  const [screen, setScreen] = useState("landing"); // landing|form|analysing|web|reveal
+  const [screen, setScreen] = useState("landing"); // landing|form|photoForm|analysing|web|reveal
   const [profile, setProfile] = useState(null);
   const [inferences, setInferences] = useState([]);
   const [source, setSource] = useState("scripted"); // scripted | loading | ai
@@ -387,9 +387,9 @@ function App() {
 
 function TopBar({ onReset, source }) {
   const badge = source === "ai"
-    ? { text: "gemini · live", cls: "border-emerald-400/40 text-emerald-300 bg-emerald-500/10" }
+    ? { text: "AI · live", cls: "border-emerald-400/40 text-emerald-300 bg-emerald-500/10" }
     : source === "loading"
-    ? { text: "gemini · querying…", cls: "border-amber-400/40 text-amber-300 bg-amber-500/10" }
+    ? { text: "AI · querying…", cls: "border-amber-400/40 text-amber-300 bg-amber-500/10" }
     : { text: "scripted rules", cls: "border-white/10 text-zinc-400" };
   return (
     <header className="border-b border-white/5 px-6 py-3 flex items-center justify-between sticky top-0 backdrop-blur bg-[#07080d]/70 z-10">
@@ -409,7 +409,7 @@ function TopBar({ onReset, source }) {
 function Footer() {
   return (
     <footer className="text-center text-[11px] mono text-zinc-600 py-6">
-      Educational demo. All inferences are scripted. No real lookups.
+      Educational demo. Inputs are sent to an AI for analysis. Use only fictional data.
     </footer>
   );
 }
@@ -440,8 +440,8 @@ function Landing({ onText, onPhoto }) {
           </button>
         </div>
         <div className="mt-12 mono text-[11px] text-zinc-500 max-w-md mx-auto leading-relaxed">
-          This simulator never sends your input anywhere. That's part of the point —
-          a real attacker would, and you'd never know.
+          What you enter here is sent to a server and on to a third-party AI — just like the
+          apps you use every day. That's the point: you'd never see it happen.
         </div>
       </div>
     </section>
@@ -620,7 +620,7 @@ function Analysing({ profile, inferences, source, onDone }) {
     <section className="max-w-3xl mx-auto px-6 py-16">
       <div className="eyebrow text-[10px] text-red-400 mb-3 flex items-center gap-2">
         <span className="inline-block w-2 h-2 rounded-full bg-red-500 pulse-dot" />
-        {source === "loading" ? "querying gemini…" : source === "ai" ? "gemini complete" : "analysing public traces"}
+        {source === "loading" ? "querying AI…" : source === "ai" ? "AI complete" : "analysing public traces"}
       </div>
       <h2 className="display text-4xl text-zinc-100 mb-6">listening…</h2>
       <div className="rounded-md border border-white/10 bg-black/60 p-5 h-72 overflow-y-auto log mono text-[13px] leading-6">
@@ -644,13 +644,13 @@ function buildLog(profile, inferences, source) {
     profile.neighbourhood && { text: `geo hint → "${profile.neighbourhood}"`, kind:"ok" },
     profile.posts && { text: `text corpus loaded · ${profile.posts.split("\n").filter(Boolean).length} post(s)`, kind:"ok" },
     source === "loading"
-      ? { text: `dispatching profile to gemini-2.5-flash for analysis…`, kind:"ok" }
+      ? { text: `dispatching to AI for analysis…`, kind:"ok" }
       : { text: "cross-referencing patterns…", kind:"ok" },
   ].filter(Boolean);
   inferences.forEach(inf => {
     log.push({ text: `inference ↦ ${inf.title}  [severity ${inf.severity}]`, kind:"alert" });
   });
-  if (source === "ai") log.push({ text: "gemini analysis complete · compiling exposure map…", kind:"ok" });
+  if (source === "ai") log.push({ text: "AI analysis complete · compiling exposure map…", kind:"ok" });
   else log.push({ text: "compiling exposure map…", kind:"ok" });
   return log;
 }
@@ -689,7 +689,7 @@ function InferenceWeb({ profile, inferences, source, aiError, onReveal }) {
       </div>
       <p className="text-zinc-400 text-sm mb-3">Click a node to see <em>how</em> the inference was made.</p>
       {source === "ai" && (
-        <div className="mono text-[11px] text-emerald-300/80 mb-4">▸ inferences generated live by gemini-2.5-flash</div>
+        <div className="mono text-[11px] text-emerald-300/80 mb-4">▸ inferences generated live by AI</div>
       )}
       {aiError && (
         <div className="mono text-[11px] text-amber-300/80 mb-4">▸ {aiError}</div>
@@ -890,9 +890,10 @@ function CaptionAnalyzer() {
   );
 }
 /* ------- Reveal ------- */
-function Reveal({ profile, inferences, onRestart }) {
+function Reveal({ profile, inferences, extracted, onRestart }) {
   const total = inferences.reduce((s,i) => s + i.severity, 0);
   const score = Math.min(100, total);
+  const isPhoto = profile?.__photo === true;
 
   /* Map back from each filled field → safer suggestion */
   const fieldKeys = [
@@ -914,11 +915,26 @@ function Reveal({ profile, inferences, onRestart }) {
         <span className="eyebrow text-[10px] text-zinc-500">step 3 / 3</span>
       </div>
       <p className="text-zinc-400 text-sm mb-8">
-        From the {fieldKeys.length} thing{fieldKeys.length === 1 ? "" : "s"} you shared,
+        From the {isPhoto ? `${profile.count} image${profile.count === 1 ? "" : "s"} you uploaded` : `${fieldKeys.length} thing${fieldKeys.length === 1 ? "" : "s"} you shared`},
         an attacker assembled <strong className="text-red-300">{inferences.length} usable inferences</strong> with
         an exposure score of <strong className="text-red-300">{score}/100</strong>.
       </p>
 
+      {extracted && extracted.length > 0 && (
+        <div className="rounded-lg border border-amber-400/30 bg-amber-500/[0.05] p-5 mb-8">
+          <div className="eyebrow text-[10px] text-amber-300 mb-3">What the AI read off your photos</div>
+          <div className="grid sm:grid-cols-2 gap-2">
+            {extracted.map((e, i) => (
+              <div key={i} className="text-sm">
+                <span className="text-zinc-400">{e.label}: </span>
+                <span className="text-zinc-100">{e.value}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {!isPhoto && (
       <div className="rounded-lg border border-red-500/30 bg-red-500/[0.05] p-5 mb-8">
         <div className="eyebrow text-[10px] text-red-300 mb-3">15 minutes in the attacker's head</div>
         <div className="space-y-3 text-[15px] text-zinc-200 leading-relaxed">
@@ -927,6 +943,7 @@ function Reveal({ profile, inferences, onRestart }) {
           ))}
         </div>
       </div>
+      )}
 
       <div className="eyebrow text-[10px] text-red-300 mb-3">Each inference, with the evidence</div>
       <div className="space-y-3 mb-8">
@@ -950,6 +967,7 @@ function Reveal({ profile, inferences, onRestart }) {
         ))}
       </div>
 
+      {fieldKeys.length > 0 && (<>
       <div className="eyebrow text-[10px] text-emerald-300 mb-3">Safer alternatives, per field</div>
       <div className="space-y-3">
         {fieldKeys.map(([k,v]) => (
@@ -962,6 +980,7 @@ function Reveal({ profile, inferences, onRestart }) {
           </div>
         ))}
       </div>
+      </>)}
 
       {/* 🟢 YOUR CAPTION ANALYZER TOOL IS ADDED RIGHT HERE! 🟢 */}
       <CaptionAnalyzer />
