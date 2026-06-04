@@ -155,3 +155,35 @@ test("normalizeResult returns empty arrays when inferences key is absent", () =>
   assert.deepEqual(out.inferences, []);
   assert.deepEqual(out.extracted, []);
 });
+
+import { runAnalysis } from "../api/analyze.js";
+
+test("runAnalysis throws a 500-style error when apiKey missing", async () => {
+  await assert.rejects(
+    () => runAnalysis({ mode: "text", profile: { username: "x" } }, { apiKey: "" }),
+    /key/i
+  );
+});
+
+test("runAnalysis calls fetch with the key and returns normalized result", async () => {
+  let calledUrl = "";
+  const fetchImpl = async (url) => {
+    calledUrl = url;
+    return {
+      ok: true,
+      json: async () => ({ candidates: [{ content: { parts: [{ text: JSON.stringify({
+        inferences: [{ id: "a", severity: 9, category: "general", title: "t", summary: "s", explain: "e", chain: ["x"] }]
+      }) }] } }] })
+    };
+  };
+  const out = await runAnalysis({ mode: "text", profile: { username: "x" } }, { apiKey: "SECRET", fetchImpl });
+  assert.ok(calledUrl.includes("SECRET"));
+  assert.equal(out.inferences.length, 1);
+});
+
+test("runAnalysis throws when Gemini returns non-OK", async () => {
+  const fetchImpl = async () => ({ ok: false, status: 500, text: async () => "boom" });
+  await assert.rejects(
+    () => runAnalysis({ mode: "text", profile: { username: "x" } }, { apiKey: "K", fetchImpl })
+  );
+});

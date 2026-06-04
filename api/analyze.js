@@ -97,6 +97,48 @@ ${JSON.stringify(profile, null, 2)}` }] }],
   };
 }
 
+const GEMINI_MODEL = "gemini-2.5-flash";
+
+export async function runAnalysis(input, { apiKey, fetchImpl = fetch } = {}) {
+  if (!apiKey) {
+    const err = new Error("Server is missing GEMINI_API_KEY.");
+    err.status = 500;
+    throw err;
+  }
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${encodeURIComponent(apiKey)}`;
+  const res = await fetchImpl(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(buildGeminiBody(input))
+  });
+  if (!res.ok) {
+    const txt = await res.text().catch(() => "");
+    const err = new Error(`Gemini ${res.status}: ${txt.slice(0, 200)}`);
+    err.status = 502;
+    throw err;
+  }
+  return normalizeResult(await res.json());
+}
+
+export default async function handler(req, res) {
+  if (req.method !== "POST") {
+    return res.status(405).json({ error: "Use POST." });
+  }
+  const body = typeof req.body === "string" ? safeParse(req.body) : req.body;
+  const check = validateRequest(body);
+  if (!check.ok) return res.status(check.status).json({ error: check.error });
+
+  try {
+    const out = await runAnalysis(body, { apiKey: process.env.GEMINI_API_KEY });
+    return res.status(200).json({ source: "gemini", ...out });
+  } catch (e) {
+    const status = e.status || 502;
+    return res.status(status).json({ error: e.message || "Analysis failed." });
+  }
+}
+
+function safeParse(s) { try { return JSON.parse(s); } catch { return null; } }
+
 export function normalizeResult(geminiJson) {
   const text = geminiJson?.candidates?.[0]?.content?.parts?.[0]?.text;
   if (!text) throw new Error("Empty response from Gemini.");
