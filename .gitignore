@@ -7,3 +7,11 @@ skills-lock.json
 Thumbs.db
 desktop.ini
 .DS_Store
+
+# Secrets
+.env
+.env*.local
+
+# Vercel
+.vercel
+node_modules
