@@ -351,11 +351,32 @@ function App() {
     }
   }
 
+  async function startFromPhotos(images) {
+    setProfile({ __photo: true, count: images.length });
+    setInferences([]);
+    setExtracted([]);
+    setAiError(null);
+    setScreen("analysing");
+    setSource("loading");
+    try {
+      const data = await callAnalyze({ mode: "photo", images });
+      setInferences(data.inferences || []);
+      setExtracted(data.extracted || []);
+      setSource(data.inferences?.length ? "ai" : "scripted");
+      if (!data.inferences?.length) setAiError("The AI couldn't read enough from these images.");
+    } catch (e) {
+      console.error(e);
+      setSource("scripted");
+      setAiError(e.message || "Photo analysis failed.");
+    }
+  }
+
   return (
     <div className="min-h-full">
       <TopBar onReset={() => setScreen("landing")} source={source} />
-      {screen === "landing"   && <Landing onStart={() => setScreen("form")} />}
+      {screen === "landing"   && <Landing onText={() => setScreen("form")} onPhoto={() => setScreen("photoForm")} />}
       {screen === "form"      && <ProfileForm onSubmit={startFromProfile} />}
+      {screen === "photoForm" && <PhotoForm onSubmit={startFromPhotos} />}
       {screen === "analysing" && <Analysing profile={profile} inferences={inferences} source={source} onDone={() => setScreen("web")} />}
       {screen === "web"       && <InferenceWeb profile={profile} inferences={inferences} source={source} aiError={aiError} onReveal={() => setScreen("reveal")} />}
       {screen === "reveal"    && <Reveal profile={profile} inferences={inferences} source={source} extracted={extracted} onRestart={() => setScreen("landing")} />}
@@ -394,7 +415,7 @@ function Footer() {
 }
 
 /* ------- Landing ------- */
-function Landing({ onStart }) {
+function Landing({ onText, onPhoto }) {
   return (
     <section className="relative">
       <div className="absolute inset-0 scan-line opacity-40 pointer-events-none" />
@@ -408,10 +429,14 @@ function Landing({ onStart }) {
           Build a fake teen profile with the kind of details people post every day.
           Watch what a predator can piece together — name, location, schedule, when you're alone.
         </p>
-        <div className="mt-10 flex justify-center gap-3">
-          <button onClick={onStart}
+        <div className="mt-10 flex flex-wrap justify-center gap-3">
+          <button onClick={onText}
             className="px-6 py-3 rounded-md bg-red-500 hover:bg-red-400 text-black font-semibold transition glow-red">
             Build a profile →
+          </button>
+          <button onClick={onPhoto}
+            className="px-6 py-3 rounded-md border border-red-400/40 text-red-200 hover:bg-red-500/10 font-semibold transition">
+            Analyse photos →
           </button>
         </div>
         <div className="mt-12 mono text-[11px] text-zinc-500 max-w-md mx-auto leading-relaxed">
