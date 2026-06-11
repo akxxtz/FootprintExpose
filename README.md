@@ -1,8 +1,8 @@
 # Footprint Expose
 
-A cybersecurity-awareness web app that shows — viscerally — how much a predator can infer from seemingly harmless public profile details. Users can either build a fictional text profile **or upload screenshots of social posts**, and the app produces an animated "predator's inference web" that reveals what an attacker could piece together.
+A cybersecurity-awareness web app that shows — viscerally — how much a predator can infer from seemingly harmless public profile details. Users enter the details that are **already public on their own accounts** (or load a sample) **or upload screenshots of their own public posts**, and the app produces an animated "predator's inference web" that reveals what an attacker could piece together.
 
-The goal is **emotional impact, not technical accuracy**. Every inference is plausible and grounded in the inputs provided — there are no real OSINT lookups and no real people involved.
+The goal is **emotional impact, not technical accuracy**. Every inference is plausible and grounded in the inputs provided — there are no real OSINT lookups, just AI reasoning over what the user chooses to enter. Inputs are scoped to what's *already visible* on the user's own profiles; nothing private (passwords, addresses, phone numbers) is ever requested.
 
 > Built as a group project for **WIC2007 Cyber Security** (Year 2, Semester 2).
 
@@ -10,9 +10,9 @@ The goal is **emotional impact, not technical accuracy**. Every inference is pla
 
 ## What it does
 
-1. **Landing screen** — dark, unsettling hero with two CTAs: *Build a text profile* or *Upload photos / post screenshots*.
-2. **Text mode** — social-media-styled inputs: username, age, school, sports team / club, neighbourhood mentions, recent post snippets, and optional pet / sibling / hangout fields.
-3. **Photo mode** — upload one or more photos or **screenshots of posts** (e.g. Instagram). No typing required. The AI reads on-screen text — handles, captions, hashtags, comments, location tags, timestamps — and physical scene details such as school crests, street signs, and sports kits.
+1. **Landing screen** — dark, unsettling hero with two CTAs: *Enter my details* or *Analyse my photos*.
+2. **Text mode** — enter the details that are already public on your own accounts (or load a sample): username, age, school, sports team / club, neighbourhood mentions, recent post snippets, and optional pet / sibling / hangout fields.
+3. **Photo mode** — upload one or more of your own public photos or **screenshots of posts** (e.g. Instagram). No typing required. The AI reads on-screen text — handles, captions, hashtags, comments, location tags, timestamps — and physical scene details such as school crests, street signs, and sports kits.
 4. **Analysing transition** — a terminal-style scan log that builds dread while the serverless function calls Gemini.
 5. **Inference web** — a force-directed graph appears node-by-node. Click any node to see *how* the inference was made (e.g. *"School name in bio + practice-day hashtag → predator can be waiting at the school gate Tue/Thu 5pm"*).
 6. **Severity meter** — a 0–100 exposure score that climbs as nodes appear.
@@ -73,7 +73,7 @@ FootprintExpose/
 |---|---|
 | `App` | Routes between landing → form / photoForm → analysing → web → reveal |
 | `Landing` | Hook + dual CTA (text / photo) + content warning |
-| `ProfileForm` | Collects fictional text-mode inputs |
+| `ProfileForm` | Collects text-mode inputs — your own already-public details, or a loaded sample |
 | `PhotoForm` | File picker; client-side downscale/compress to base64 (≤1536px, JPEG 0.85) |
 | `Analysing` | Animated terminal log during the API call |
 | `runInference` | Pure function `(profile) ⇒ inference[]` — offline scripted fallback for text mode |
@@ -155,11 +155,11 @@ Prerequisites: **Node 18+** and the **Vercel CLI** (`npm i -g vercel`).
 
 ## Privacy & ethics
 
-**Inputs are sent to a third-party AI.** When you submit a profile or photos, the data is sent to our serverless function and forwarded to Google Gemini for analysis. This is intentional — and part of the lesson. For the demo, use only:
+**Inputs are sent to a third-party AI.** When you submit a profile or photos, the data is sent to our serverless function and forwarded to Google Gemini for analysis. This is intentional — and part of the lesson. For the demo, enter only:
 
-- Fictional profiles (the app ships with sample profiles such as `alex_runs_2010`).
-- Your own test post or a purpose-made mock-up for photo mode.
-- **Never upload a real stranger's post or a real child's photo.**
+- Details that are **already public** on your own accounts — the stuff anyone can see without following you. (No account to check? The app ships with sample profiles such as `alex_runs_2010`.)
+- Your own already-public posts or screenshots for photo mode.
+- **Never enter a private password, home address, or phone number — and never upload a real stranger's post or another child's photo.**
 
 The old single-file version carried the privacy claim *"we never send your data anywhere."* That claim is gone in v2. The honest lesson is: the moment you hand data to an app — including this one — it may travel further than you expect.
 
@@ -168,7 +168,7 @@ The old single-file version carried the privacy claim *"we never send your data 
 ## Safety & ethical guardrails
 
 - **No real profile lookups.** The app performs no actual OSINT scraping.
-- **Prefilled sample profiles** (clearly fictional) so users are not tempted to enter real personal data. A banner reminds them.
+- **Public-data-only scope.** Inputs are framed as "only what's already public on your own accounts"; a banner warns against entering private passwords, addresses, or phone numbers. Prefilled sample profiles are available for anyone who'd rather not use their own.
 - **No grooming scripts shown.** Inferences stop at *what an attacker could know*, never *what they would say*.
 - **Server-side key.** The Gemini key lives only in the serverless function's environment; it is never sent to or exposed in the browser.
 - **Content warning** on the landing screen.
